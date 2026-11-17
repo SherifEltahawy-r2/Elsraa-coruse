@@ -18,7 +18,15 @@ alter table public.site_settings
   add column if not exists developer_name text not null default 'R2J WEB DEV',
   add column if not exists developer_url text not null default ''
     check (developer_url = '' or developer_url ~ '^https://[^[:space:]]+$'),
-  add column if not exists developer_icon_url text not null default 'assets/r2j-web-dev.png';
+  add column if not exists developer_icon_url text not null default 'assets/r2j-web-dev.png',
+  add column if not exists hero_title_ar text not null default 'تعليم قانوني متقدم للحقوق في جامعة الزقازيق',
+  add column if not exists hero_title_en text not null default 'Advanced legal education at Zagazig University',
+  add column if not exists hero_subtitle_ar text not null default 'منصة تعليمية متكاملة تحت إشراف الدكتورة إسراء الدسوقي.',
+  add column if not exists hero_subtitle_en text not null default 'A complete learning platform supervised by Dr. Israa Elsadogy.',
+  add column if not exists courses_title_ar text not null default 'مقررات كلية الحقوق – جامعة الزقازيق',
+  add column if not exists courses_title_en text not null default 'Faculty of Law courses - Zagazig University',
+  add column if not exists community_title_ar text not null default 'الدردشة العامة والصفوف الخاصة',
+  add column if not exists community_title_en text not null default 'Public chat and private course rooms';
 
 insert into public.site_settings (id)
 values (1)

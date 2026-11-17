@@ -561,20 +561,35 @@ function renderCopyright() {
 
 async function loadSiteSettings() {
   const { data, error } = await appState.client.from('site_settings')
-    .select('facebook_url,instagram_url,tiktok_url,whatsapp_number,copyright_text_ar,copyright_text_en,developer_name,developer_url,developer_icon_url')
+    .select('facebook_url,instagram_url,tiktok_url,whatsapp_number,copyright_text_ar,copyright_text_en,developer_name,developer_url,developer_icon_url,hero_title_ar,hero_title_en,hero_subtitle_ar,hero_subtitle_en,courses_title_ar,courses_title_en,community_title_ar,community_title_en')
     .eq('id', 1).maybeSingle();
   if (error) throw error;
   appState.siteSettings = data || {};
   if (data) {
-    document.querySelectorAll('#siteSettingsForm, #copyrightSettingsForm').forEach((form) => {
+    document.querySelectorAll('#siteSettingsForm, #copyrightSettingsForm, #siteContentForm').forEach((form) => {
       Object.keys(data).forEach((key) => {
         const input = form.elements.namedItem(key);
         if (input) input.value = data[key] || '';
       });
     });
   }
+  renderEditableSiteContent();
   renderSiteSocialLinks();
   renderCopyright();
+}
+
+function renderEditableSiteContent() {
+  const settings = appState.siteSettings;
+  const mappings = {
+    hero_title: appState.language === 'ar' ? settings.hero_title_ar : settings.hero_title_en,
+    hero_subtitle: appState.language === 'ar' ? settings.hero_subtitle_ar : settings.hero_subtitle_en,
+    courses_title: appState.language === 'ar' ? settings.courses_title_ar : settings.courses_title_en,
+    community_title: appState.language === 'ar' ? settings.community_title_ar : settings.community_title_en,
+  };
+  document.querySelectorAll('[data-cms]').forEach((element) => {
+    const value = mappings[element.dataset.cms];
+    if (value) element.textContent = String(value);
+  });
 }
 
 function formatDate(value) {
@@ -672,11 +687,18 @@ function updateNavigation() {
       </div>
     `;
     nav.prepend(wrapper);
-    wrapper.querySelector('.notification-trigger').addEventListener('click', () => {
+    wrapper.querySelector('.notification-trigger').addEventListener('click', (event) => {
+      event.stopPropagation();
       const panel = wrapper.querySelector('.notification-panel');
       panel.hidden = !panel.hidden;
       wrapper.querySelector('.notification-trigger').setAttribute('aria-expanded', String(!panel.hidden));
       if (!panel.hidden) renderNotifications();
+    });
+    document.addEventListener('pointerdown', (event) => {
+      if (!wrapper.contains(event.target)) {
+        wrapper.querySelector('.notification-panel').hidden = true;
+        wrapper.querySelector('.notification-trigger').setAttribute('aria-expanded', 'false');
+      }
     });
   }
 
@@ -696,6 +718,7 @@ function toggleLanguage() {
   updateNavigation();
   renderSiteSocialLinks();
   renderCopyright();
+  renderEditableSiteContent();
   renderNotifications();
   renderCourseCatalog().catch(reportError);
   loadCourseDetails().catch(reportError);
@@ -746,6 +769,9 @@ function renderNotifications() {
   items.forEach((announcement) => {
     const item = document.createElement('article');
     item.className = `notification-item${announcement.isRead ? '' : ' is-unread'}`;
+    item.tabIndex = 0;
+    item.setAttribute('role', 'button');
+    item.setAttribute('aria-label', getLocalized(announcement, 'title'));
     const title = document.createElement('strong');
     title.textContent = getLocalized(announcement, 'title');
     const body = document.createElement('p');
@@ -753,26 +779,67 @@ function renderNotifications() {
     const date = document.createElement('small');
     date.textContent = formatDate(announcement.created_at);
     item.append(title, body, date);
-    if (!announcement.isRead) {
-      item.addEventListener('click', async () => {
-        const { error } = announcement.isAdmin
-          ? await appState.client.from('admin_notifications').update({ read_at: new Date().toISOString() }).eq('id', announcement.id)
-          : await appState.client.from('announcement_reads').upsert({
-            announcement_id: announcement.id,
-            profile_id: appState.user.id,
-          });
-        if (error) return reportError(error);
-        if (announcement.isAdmin) {
-          announcement.read_at = new Date().toISOString();
-        } else {
-          appState.announcementReads.add(announcement.id);
-        }
-        renderNotifications();
-      });
-    }
+    const openDetails = () => openNotificationDetails(announcement);
+    item.addEventListener('click', openDetails);
+    item.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+        openDetails();
+      }
+    });
     list.appendChild(item);
   });
 }
+
+async function openNotificationDetails(announcement) {
+  if (!announcement.isRead) {
+    const { error } = announcement.isAdmin
+      ? await appState.client.from('admin_notifications').update({ read_at: new Date().toISOString() }).eq('id', announcement.id)
+      : await appState.client.from('announcement_reads').upsert({
+        announcement_id: announcement.id,
+        profile_id: appState.user.id,
+      });
+    if (error) return reportError(error);
+    if (announcement.isAdmin) announcement.read_at = new Date().toISOString();
+    else appState.announcementReads.add(announcement.id);
+  }
+
+  document.querySelector('.notification-details')?.remove();
+  const dialog = document.createElement('section');
+  dialog.className = 'notification-details';
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  dialog.innerHTML = `
+    <div class="notification-details-card">
+      <button class="notification-details-close" type="button" aria-label="${t('إغلاق', 'Close')}">×</button>
+      <span class="eyebrow">${t('تفاصيل الإشعار', 'Notification details')}</span>
+      <h2></h2>
+      <p class="notification-details-body"></p>
+      <small></small>
+    </div>
+  `;
+  dialog.querySelector('h2').textContent = getLocalized(announcement, 'title');
+  dialog.querySelector('.notification-details-body').textContent = getLocalized(announcement, 'body');
+  dialog.querySelector('small').textContent = formatDate(announcement.created_at);
+  const close = () => dialog.remove();
+  dialog.querySelector('.notification-details-close').addEventListener('click', close);
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) close();
+  });
+  document.body.appendChild(dialog);
+  dialog.querySelector('.notification-details-close').focus();
+  renderNotifications();
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    document.querySelector('.notification-details')?.remove();
+    document.querySelectorAll('.notification-panel').forEach((panel) => { panel.hidden = true; });
+    document.querySelectorAll('.notification-trigger').forEach((trigger) => {
+      trigger.setAttribute('aria-expanded', 'false');
+    });
+  }
+});
 
 function subscribeToAnnouncements() {
   if (!appState.client || !appState.user) return;
@@ -1287,6 +1354,20 @@ async function saveCopyrightSettings(event) {
   await loadSiteSettings();
 }
 
+async function saveSiteContent(event) {
+  event.preventDefault();
+  const values = new FormData(event.currentTarget);
+  const content = {};
+  ['hero_title_ar', 'hero_title_en', 'hero_subtitle_ar', 'hero_subtitle_en',
+    'courses_title_ar', 'courses_title_en', 'community_title_ar', 'community_title_en'].forEach((key) => {
+    content[key] = String(values.get(key) || '').trim();
+  });
+  const { error } = await appState.client.from('site_settings').update(content).eq('id', 1);
+  if (error) return reportError(error);
+  showToast(t('تم حفظ محتوى الصفحات.', 'Page content saved.'));
+  await loadSiteSettings();
+}
+
 function populateCourseSelects() {
   document.querySelectorAll('[data-course-select]').forEach((select) => {
     const selected = select.value;
@@ -1438,6 +1519,11 @@ function bindAdminForms() {
   if (copyrightSettingsForm && !copyrightSettingsForm.dataset.bound) {
     copyrightSettingsForm.dataset.bound = 'true';
     copyrightSettingsForm.addEventListener('submit', saveCopyrightSettings);
+  }
+  const siteContentForm = document.getElementById('siteContentForm');
+  if (siteContentForm && !siteContentForm.dataset.bound) {
+    siteContentForm.dataset.bound = 'true';
+    siteContentForm.addEventListener('submit', saveSiteContent);
   }
   const editSelect = document.getElementById('editCourseId');
   if (editSelect && !editSelect.dataset.bound) {
