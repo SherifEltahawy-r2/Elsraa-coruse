@@ -1859,12 +1859,37 @@ textarea {
   }
 
   .nav-actions > .btn {
-    min-width: 76px;
-    padding-inline: 8px;
+    min-width: 38px;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    font-size: 0;
   }
 
   .admin-dashboard-link {
-    display: none;
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    max-width: 38px;
+    justify-content: center;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0;
+  }
+
+  .admin-dashboard-link::before {
+    content: '⚙';
+    font-size: 18px;
+  }
+
+  .nav-actions > .btn.is-sign-out::before {
+    content: 'خروج';
+    font-size: 10px;
+  }
+
+  .nav-actions > .btn:not(.is-sign-out)::before {
+    content: 'دخول';
+    font-size: 10px;
   }
 
   .notification-panel {

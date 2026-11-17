@@ -656,6 +656,7 @@ function updateNavigation() {
 
   const loginLink = document.querySelector('.nav-actions a[href="login.html"]');
   if (loginLink && appState.user) {
+    loginLink.classList.add('is-sign-out');
     loginLink.textContent = t('تسجيل الخروج', 'Sign out');
     loginLink.href = '#sign-out';
     loginLink.addEventListener('click', async (event) => {
@@ -672,7 +673,11 @@ function updateNavigation() {
     adminLink.className = 'admin-dashboard-link';
     adminLink.href = 'admin.html';
     adminLink.textContent = t('لوحة الإدارة', 'Admin dashboard');
+    adminLink.setAttribute('aria-label', t('لوحة الإدارة', 'Admin dashboard'));
+    adminLink.title = t('لوحة الإدارة', 'Admin dashboard');
     nav.prepend(adminLink);
+  } else if (nav && !isAdmin()) {
+    nav.querySelector('.admin-dashboard-link')?.remove();
   }
   if (nav && !nav.querySelector('.notification-trigger')) {
     const wrapper = document.createElement('div');
