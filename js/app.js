@@ -452,6 +452,49 @@ function safeHttpsUrl(value) {
   }
 }
 
+async function resolveCourseVideoUrl(videoPath) {
+  const path = String(videoPath || '').trim();
+  if (!path) return null;
+  if (/^https?:\/\//i.test(path)) return path;
+  if (!appState.client) return null;
+
+  const { data } = appState.client.storage
+    .from('course-videos')
+    .getPublicUrl(path);
+  return data?.publicUrl || null;
+}
+
+function bindCourseVideo(video, initialUrl, storagePath) {
+  if (!initialUrl) return;
+  let signedFallbackAttempted = false;
+  video.controls = true;
+  video.playsInline = true;
+  video.preload = 'metadata';
+  video.src = initialUrl;
+
+  video.addEventListener('error', async () => {
+    console.error('Course video failed to load.', {
+      storagePath,
+      initialUrl,
+      mediaError: video.error,
+    });
+    if (signedFallbackAttempted || !storagePath || /^https?:\/\//i.test(storagePath)) return;
+    signedFallbackAttempted = true;
+    try {
+      const { data, error } = await appState.client.storage
+        .from('course-videos')
+        .createSignedUrl(storagePath, 3600);
+      if (error) throw error;
+      if (data?.signedUrl) {
+        video.src = data.signedUrl;
+        video.load();
+      }
+    } catch (error) {
+      console.error('Could not create a signed course video URL.', error);
+    }
+  });
+}
+
 function renderSiteSocialLinks() {
   const settings = appState.siteSettings;
   const icons = {
@@ -1075,6 +1118,22 @@ async function loadCourseDetails() {
   if (enrollButton) {
     enrollButton.onclick = () => requestEnrollment(data.id);
   }
+  const videoFrame = document.querySelector('.video-frame');
+  if (videoFrame && data.video_path) {
+    const videoUrl = await resolveCourseVideoUrl(data.video_path);
+    if (videoUrl) {
+      videoFrame.replaceChildren();
+      const video = document.createElement('video');
+      video.className = 'course-detail-video';
+      video.setAttribute('controls', '');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('preload', 'metadata');
+      bindCourseVideo(video, videoUrl, data.video_path);
+      videoFrame.appendChild(video);
+    } else {
+      console.error('Course video URL could not be resolved.', { courseId: data.id, videoPath: data.video_path });
+    }
+  }
   await renderCourseReviews(data.id);
   if (appState.user) await renderCourseSchedule(data.id);
 }
@@ -1135,16 +1194,22 @@ async function loadDashboard() {
         : statusLabel(enrollment.status);
       item.append(name, status, code);
       if (enrollment.status === 'approved' && enrollment.course.video_path) {
-        const { data: signed, error } = await appState.client.storage.from('course-videos')
-          .createSignedUrl(enrollment.course.video_path, 60);
-        if (error) reportError(error);
-        else {
-          const video = document.createElement('a');
-          video.href = signed.signedUrl;
-          video.target = '_blank';
-          video.rel = 'noopener noreferrer';
-          video.textContent = t('مشاهدة المحاضرة', 'Watch lesson');
-          item.appendChild(video);
+        const videoUrl = await resolveCourseVideoUrl(enrollment.course.video_path);
+        if (videoUrl) {
+          const videoShell = document.createElement('div');
+          videoShell.className = 'dashboard-video-shell';
+          const video = document.createElement('video');
+          video.className = 'dashboard-course-video';
+          video.setAttribute('controls', '');
+          video.setAttribute('playsinline', '');
+          bindCourseVideo(video, videoUrl, enrollment.course.video_path);
+          videoShell.appendChild(video);
+          item.appendChild(videoShell);
+        } else {
+          console.error('Course video URL could not be resolved.', {
+            courseId: enrollment.course.id,
+            videoPath: enrollment.course.video_path,
+          });
         }
       }
       courseList.appendChild(item);
