@@ -1,0 +1,17 @@
+{
+  "name": "Al-Israa Law Center",
+  "short_name": "Al-Israa",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#030B1A",
+  "theme_color": "#061838",
+  "description": "3D bilingual educational platform for Faculty of Law - Zagazig University.",
+  "icons": [
+    {
+      "src": "assets/logo.png",
+      "sizes": "640x640",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

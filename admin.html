@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>لوحة الإدارة | Al-Israa Law Center</title>
+    <meta name="description" content="إدارة المقررات والطلاب والمواعيد والإشعارات." />
+    <link rel="icon" type="image/png" href="assets/logo.png" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@200;300;400;500;600;700;800;900&family=Cinzel:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body class="theme-dark">
+    <header class="site-header">
+      <nav class="navbar container">
+        <a href="index.html" class="brand">
+          <img src="assets/logo.png" alt="شعار مركز الإسراء للحقوق" class="brand-logo" />
+          <div class="brand-text"><span class="brand-name">Al-Israa</span><small>Law Center</small></div>
+        </a>
+        <div class="nav-links"><a href="index.html">الرئيسية</a><a href="courses.html">المقررات</a><a href="community.html">المجتمع</a><a href="dashboard.html">لوحة الطالب</a></div>
+        <div class="nav-actions">
+          <button class="lang-toggle" aria-label="Toggle language"><span>EN</span></button>
+          <button class="theme-toggle" aria-label="Toggle theme"><i class="icon">☀</i></button>
+          <a href="login.html" class="btn btn-primary">تسجيل الدخول</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container section-space admin-page">
+      <div class="section-heading inline-header"><div><span class="eyebrow">الإدارة</span><h1>لوحة التحكم الرئيسية</h1></div></div>
+      <div class="admin-grid">
+        <section class="glass-card panel-block">
+          <h2>إضافة أو تعديل مقرر</h2>
+          <form id="courseAdminForm" class="admin-form">
+            <label>اختر مقررًا للتعديل<select id="editCourseId" name="edit_id"><option value="">مقرر جديد</option></select></label>
+            <div class="field-row">
+              <label>عنوان المقرر بالعربية<input name="title_ar" required maxlength="140" /></label>
+              <label>عنوان المقرر بالإنجليزية<input name="title_en" required maxlength="140" /></label>
+            </div>
+            <div class="field-row">
+              <label>وصف المقرر بالعربية<textarea name="description_ar" maxlength="2000"></textarea></label>
+              <label>وصف المقرر بالإنجليزية<textarea name="description_en" maxlength="2000"></textarea></label>
+            </div>
+            <div class="field-row">
+              <label>السعر<input name="price" type="number" min="0" step="0.01" required /></label>
+              <label>الفرقة الدراسية
+                <select name="academic_year" required>
+                  <option value="">اختر الفرقة الدراسية</option><option value="1">الفرقة الأولى</option>
+                  <option value="2">الفرقة الثانية</option><option value="3">الفرقة الثالثة</option>
+                  <option value="4">الفرقة الرابعة</option>
+                </select>
+              </label>
+            </div>
+            <label>مسار الفيديو الخاص في Supabase<input name="video_path" placeholder="course-id/video.mp4" /></label>
+            <label>رفع فيديو جديد (اختياري)<input name="video_file" type="file" accept="video/*" /></label>
+            <label class="checkbox-row"><input name="is_active" type="checkbox" checked /> نشر المقرر</label>
+            <button class="btn btn-primary" type="submit">حفظ المقرر</button>
+          </form>
+        </section>
+        <section class="glass-card panel-block"><h2>طلبات التسجيل</h2><div id="adminRequests" class="request-list"></div></section>
+      </div>
+
+      <div class="admin-grid section-space-sm">
+        <section class="glass-card panel-block">
+          <h2>إدارة مواعيد الكورسات</h2>
+          <form id="scheduleForm" class="admin-form">
+            <input type="hidden" name="schedule_id" />
+            <label>المقرر<select name="course_id" data-course-select required></select></label>
+            <div class="field-row">
+              <label>عنوان الموعد بالعربية<input name="title_ar" required maxlength="140" /></label>
+              <label>عنوان الموعد بالإنجليزية<input name="title_en" required maxlength="140" /></label>
+            </div>
+            <div class="field-row">
+              <label>تاريخ ووقت البداية<input name="starts_at" type="datetime-local" required /></label>
+              <label>تاريخ ووقت النهاية<input name="ends_at" type="datetime-local" /></label>
+            </div>
+            <label>رابط اللقاء (اختياري)<input name="meeting_url" type="url" /></label>
+            <button class="btn btn-primary" type="submit">حفظ الموعد</button>
+          </form>
+          <div id="adminScheduleList" class="schedule-list"></div>
+        </section>
+        <section class="glass-card panel-block">
+          <h2>نشر إشعار للجميع</h2>
+          <form id="announcementForm" class="admin-form">
+            <label>العنوان بالعربية<input name="title_ar" required maxlength="160" /></label>
+            <label>العنوان بالإنجليزية<input name="title_en" required maxlength="160" /></label>
+            <label>الرسالة بالعربية<textarea name="body_ar" required maxlength="2000"></textarea></label>
+            <label>الرسالة بالإنجليزية<textarea name="body_en" required maxlength="2000"></textarea></label>
+            <button class="btn btn-primary" type="submit">نشر الإشعار</button>
+          </form>
+        </section>
+      </div>
+
+      <section class="glass-card panel-block section-space-sm">
+        <h2>روابط التواصل الاجتماعي</h2>
+        <p>أدخل روابط تبدأ بـ https://، ورقم واتساب مع مفتاح الدولة، مثل +20.</p>
+        <form id="siteSettingsForm" class="admin-form">
+          <div class="field-row">
+            <label>Facebook<input name="facebook_url" type="url" maxlength="300" placeholder="https://facebook.com/..." /></label>
+            <label>Instagram<input name="instagram_url" type="url" maxlength="300" placeholder="https://instagram.com/..." /></label>
+          </div>
+          <div class="field-row">
+            <label>TikTok<input name="tiktok_url" type="url" maxlength="300" placeholder="https://tiktok.com/@..." /></label>
+            <label>رقم واتساب<input name="whatsapp_number" type="tel" maxlength="30" placeholder="+20 10 1234 5678" /></label>
+          </div>
+          <button class="btn btn-primary" type="submit">حفظ روابط التواصل</button>
+        </form>
+      </section>
+
+      <section class="glass-card panel-block section-space-sm">
+        <h2>حقوق الموقع والمطور</h2>
+        <p>يمكن تغيير نص الحقوق وأيقونة المطوّر والرابط من هنا.</p>
+        <form id="copyrightSettingsForm" class="admin-form">
+          <div class="field-row">
+            <label>نص الحقوق بالعربية<input name="copyright_text_ar" maxlength="180" placeholder="جميع الحقوق محفوظة لدى R2J WEB DEV" /></label>
+            <label>نص الحقوق بالإنجليزية<input name="copyright_text_en" maxlength="180" placeholder="All rights reserved by R2J WEB DEV" /></label>
+          </div>
+          <div class="field-row">
+            <label>اسم المطوّر<input name="developer_name" maxlength="100" placeholder="R2J WEB DEV" /></label>
+            <label>رابط المطوّر (اختياري)<input name="developer_url" type="url" maxlength="300" placeholder="https://..." /></label>
+          </div>
+          <label>رابط أو مسار أيقونة المطوّر<input name="developer_icon_url" maxlength="300" placeholder="assets/r2j-web-dev.png" /></label>
+          <button class="btn btn-primary" type="submit">حفظ حقوق الموقع</button>
+        </form>
+      </section>
+
+      <section class="glass-card panel-block section-space-sm">
+        <h2>إدارة المسؤولين</h2>
+        <p>المستخدم يجب أن ينشئ حسابًا ويؤكد بريده أولًا، ثم يمكن ترقيته أو إزالة صلاحية الإدارة.</p>
+        <form id="adminRoleForm" class="admin-form role-form">
+          <label>ابحث عن بريد المستخدم<input name="email" type="email" required /></label>
+          <label>الصلاحية<select name="role"><option value="admin">مسؤول</option><option value="student">طالب</option></select></label>
+          <button class="btn btn-primary" type="submit">حفظ الصلاحية</button>
+        </form>
+      </section>
+      <section class="glass-card panel-block section-space-sm">
+        <h2>مراجعة التقييمات</h2>
+        <div id="adminReviews" class="review-list"></div>
+      </section>
+      <section class="glass-card panel-block section-space-sm"><h2>قائمة الطلاب والمسؤولين</h2><div id="studentDirectory" class="directory-table"></div></section>
+    </main>
+
+    <footer class="site-footer"><div class="container footer-grid">
+      <div><a href="index.html" class="brand footer-brand"><img src="assets/logo.png" alt="شعار مركز الإسراء للحقوق" class="brand-logo" /><div class="brand-text"><span class="brand-name">Al-Israa</span><small>Law Center</small></div></a></div>
+      <div><h4>مركز الإسراء</h4><p>تعليم قانوني متميز لكل طلاب الحقوق.</p></div>
+      <div><h4>روابط</h4><ul><li><a href="courses.html">المقررات</a></li><li><a href="community.html">المجتمع</a></li><li><a href="dashboard.html">لوحة الطالب</a></li></ul></div>
+    </div></footer>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

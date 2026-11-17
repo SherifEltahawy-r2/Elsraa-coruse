@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>تفاصيل المقرر | Al-Israa Law Center</title>
+    <meta name="description" content="تفاصيل المقرر الدراسي ومحتواه ومميزاته." />
+    <link rel="icon" type="image/png" href="assets/logo.png" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@200;300;400;500;600;700;800;900&family=Cinzel:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body class="theme-dark">
+    <header class="site-header">
+      <nav class="navbar container">
+        <div class="brand-wrap">
+          <a href="index.html" class="brand">
+            <img src="assets/logo.png" alt="شعار مركز الإسراء للحقوق" class="brand-logo" />
+            <div class="brand-text">
+              <span class="brand-name">Al-Israa</span>
+              <small>Law Center</small>
+            </div>
+          </a>
+        </div>
+        <div class="nav-links">
+          <a href="index.html">الرئيسية</a>
+          <a href="courses.html">المقررات</a>
+          <a href="community.html">المجتمع</a>
+          <a href="dashboard.html">لوحة الطالب</a>
+        </div>
+        <div class="nav-actions">
+          <button class="lang-toggle" aria-label="Toggle language"><span>EN</span></button>
+          <button class="theme-toggle" aria-label="Toggle theme"><i class="icon">☀</i></button>
+          <a href="login.html" class="btn btn-primary">تسجيل الدخول</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container section-space">
+      <div class="course-detail-shell">
+        <div class="details-panel glass-card">
+          <div class="detail-header">
+            <span class="course-tag">القانون المدني</span>
+            <span class="course-price">420 ج.م</span>
+          </div>
+          <h1>القانون المدني – الفرقة الثانية</h1>
+          <p>
+            يتناول هذا المقرر الأسس القانونية للعقود، الالتزامات، الحقوق العينية، والمراحل العملية في فهم القواعد المدنية في التطبيق والأحكام.
+          </p>
+
+          <div class="video-box">
+            <div class="video-frame">
+              <div class="play-badge">▶</div>
+              <div class="video-overlay">Preview Lecture</div>
+            </div>
+          </div>
+
+          <div class="detail-meta">
+            <div><strong>المدة:</strong> 16 أسبوعًا</div>
+            <div><strong>المستوى:</strong> الفرقة الثانية</div>
+            <div><strong>التقييم:</strong> <span id="courseInlineRating">—</span></div>
+          </div>
+
+          <div class="detail-actions">
+            <button type="button" class="btn btn-primary" id="enrollCourseButton">اطلب الالتحاق</button>
+            <a href="courses.html" class="btn btn-secondary">عرض المقررات</a>
+          </div>
+        </div>
+
+        <aside class="syllabus-panel glass-card">
+          <h3>ملخص المنهج</h3>
+          <ul class="syllabus-list">
+            <li>مفهوم الالتزام وسببه</li>
+            <li>العقد الصحيح والمخلّ</li>
+            <li>الملكية وحقوق عينية أخرى</li>
+            <li>التزامات البائع والمشتري</li>
+            <li>الاستحقاق وقواعد التقاضي</li>
+            <li>تطبيقات قضائية وحالات عملية</li>
+          </ul>
+        </aside>
+      </div>
+
+      <section class="section-space">
+        <div class="section-heading">
+          <span class="eyebrow">محتوى المقرر</span>
+          <h2>أبرز الوحدات الدراسية</h2>
+        </div>
+
+        <div class="feature-grid">
+          <div class="info-card glass-card">
+            <h4>الوحدة 1</h4>
+            <p>مبادئ الالتزام وأركانه، مصادره، وإثباته في القانون المدني.</p>
+          </div>
+          <div class="info-card glass-card">
+            <h4>الوحدة 2</h4>
+            <p>العقد، شروطه، الأثر القانوني، وحالات إبطال التعاقدات.</p>
+          </div>
+          <div class="info-card glass-card">
+            <h4>الوحدة 3</h4>
+            <p>الملكية، الحقوق العينية، وشرح التطبيق القضائي للحالات القضائية.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-space">
+        <div class="section-heading">
+          <span class="eyebrow">مواعيد المقرر</span>
+          <h2>المواعيد القادمة</h2>
+        </div>
+        <div id="courseSchedule" class="schedule-list"></div>
+      </section>
+
+      <section class="section-space">
+        <div class="section-heading">
+          <span class="eyebrow">آراء الطلاب</span>
+          <h2>التقييمات</h2>
+          <p id="courseAverageRating">—</p>
+        </div>
+        <form id="courseReviewForm" class="glass-card panel-block review-form" hidden>
+          <label>معدل المقرر
+            <select name="rating" required>
+              <option value="5">5 — ممتاز</option><option value="4">4 — جيد جدًا</option>
+              <option value="3">3 — جيد</option><option value="2">2 — مقبول</option><option value="1">1 — ضعيف</option>
+            </select>
+          </label>
+          <label>اكتب تقييمك<textarea name="comment" maxlength="1000"></textarea></label>
+          <button type="submit" class="btn btn-primary">إرسال التقييم</button>
+        </form>
+        <div id="courseReviews" class="review-list"></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <a href="index.html" class="brand footer-brand">
+            <img src="assets/logo.png" alt="شعار مركز الإسراء للحقوق" class="brand-logo" />
+            <div class="brand-text">
+              <span class="brand-name">Al-Israa</span>
+              <small>Law Center</small>
+            </div>
+          </a>
+        </div>
+        <div>
+          <h4>مركز الإسراء</h4>
+          <p>تعليم قانوني متميز لكل طلاب الحقوق.</p>
+        </div>
+        <div>
+          <h4>روابط</h4>
+          <ul>
+            <li><a href="courses.html">المقررات</a></li>
+            <li><a href="community.html">المجتمع</a></li>
+            <li><a href="dashboard.html">لوحة الطالب</a></li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>لوحة الطالب | Al-Israa Law Center</title>
+    <meta name="description" content="لوحة الطالب في نظام مركز الإسراء التعليمي." />
+    <link rel="icon" type="image/png" href="assets/logo.png" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@200;300;400;500;600;700;800;900&family=Cinzel:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body class="theme-dark">
+    <header class="site-header">
+      <nav class="navbar container">
+        <a href="index.html" class="brand">
+          <img src="assets/logo.png" alt="شعار مركز الإسراء للحقوق" class="brand-logo" />
+          <div class="brand-text"><span class="brand-name">Al-Israa</span><small>Law Center</small></div>
+        </a>
+        <div class="nav-links">
+          <a href="index.html">الرئيسية</a><a href="courses.html">المقررات</a>
+          <a href="community.html">المجتمع</a><a href="dashboard.html">لوحة الطالب</a>
+        </div>
+        <div class="nav-actions">
+          <button class="lang-toggle" aria-label="Toggle language"><span>EN</span></button>
+          <button class="theme-toggle" aria-label="Toggle theme"><i class="icon">☀</i></button>
+          <a href="login.html" class="btn btn-primary">تسجيل الدخول</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container section-space dashboard-page">
+      <div class="dashboard-grid">
+        <aside class="dashboard-side glass-card">
+          <h1>لوحة الطالب</h1>
+          <div class="student-profile">
+            <div class="avatar-circle">إ</div>
+            <div><strong id="studentName"></strong><small id="studentFaculty"></small></div>
+          </div>
+          <nav class="side-menu" aria-label="Student dashboard">
+            <button class="active" data-dashboard-tab="courses">دوراتي</button>
+            <button data-dashboard-tab="schedule">المواعيد</button>
+            <button data-dashboard-tab="reviews">التقييمات</button>
+            <button data-dashboard-tab="profile">الملف الشخصي</button>
+          </nav>
+        </aside>
+
+        <div class="dashboard-main">
+          <section class="dashboard-panel" data-dashboard-panel="courses">
+            <div class="dash-cards">
+              <div class="mini-stat glass-card"><span>دوراتي</span><strong id="enrolledCount">0</strong></div>
+              <div class="mini-stat glass-card"><span>كود الدخول</span><strong>AL-••••••••••••</strong></div>
+            </div>
+            <section class="content-panel glass-card">
+              <h2>دوراتي الحالية</h2>
+              <p>يظهر كود الدخول بعد اعتماد طلب الالتحاق من الإدارة.</p>
+              <div id="studentCourses" class="student-course-list"></div>
+            </section>
+          </section>
+
+          <section class="dashboard-panel" data-dashboard-panel="schedule" hidden>
+            <section class="content-panel glass-card">
+              <h2>مواعيدي القادمة</h2>
+              <div id="studentSchedule" class="schedule-list"></div>
+            </section>
+          </section>
+
+          <section class="dashboard-panel" data-dashboard-panel="reviews" hidden>
+            <section class="content-panel glass-card">
+              <h2>تقييماتي</h2>
+              <div id="myReviews" class="review-list"></div>
+            </section>
+          </section>
+
+          <section class="dashboard-panel" data-dashboard-panel="profile" hidden>
+            <section class="content-panel glass-card">
+              <h2>تعديل الملف الشخصي</h2>
+              <form id="profileForm" class="admin-form">
+                <label>الاسم الكامل<input name="full_name" required maxlength="100" /></label>
+                <label>الكلية والجامعة<input name="faculty" required maxlength="120" /></label>
+                <label>الفرقة الدراسية
+                  <select name="academic_year" required>
+                    <option value="1">الفرقة الأولى</option><option value="2">الفرقة الثانية</option>
+                    <option value="3">الفرقة الثالثة</option><option value="4">الفرقة الرابعة</option>
+                  </select>
+                </label>
+                <label>رقم الهاتف<input name="phone" type="tel" required maxlength="30" /></label>
+                <button class="btn btn-primary" type="submit">حفظ التعديلات</button>
+              </form>
+            </section>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer"><div class="container footer-grid">
+      <div><a href="index.html" class="brand footer-brand"><img src="assets/logo.png" alt="شعار مركز الإسراء للحقوق" class="brand-logo" /><div class="brand-text"><span class="brand-name">Al-Israa</span><small>Law Center</small></div></a></div>
+      <div><h4>مركز الإسراء</h4><p>تعليم قانوني متميز لكل طلاب الحقوق.</p></div>
+      <div><h4>روابط</h4><ul><li><a href="courses.html">المقررات</a></li><li><a href="community.html">المجتمع</a></li><li><a href="login.html">تسجيل الدخول</a></li></ul></div>
+    </div></footer>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

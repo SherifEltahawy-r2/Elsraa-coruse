@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>المجتمع | Al-Israa Law Center</title>
+    <meta name="description" content="مجتمع الطلاب والمحادثات الخاصة والعامة." />
+    <link rel="icon" type="image/png" href="assets/logo.png" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@200;300;400;500;600;700;800;900&family=Cinzel:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body class="theme-dark">
+    <header class="site-header">
+      <nav class="navbar container">
+        <div class="brand-wrap">
+          <a href="index.html" class="brand">
+            <img src="assets/logo.png" alt="شعار مركز الإسراء للحقوق" class="brand-logo" />
+            <div class="brand-text">
+              <span class="brand-name">Al-Israa</span>
+              <small>Law Center</small>
+            </div>
+          </a>
+        </div>
+        <div class="nav-links">
+          <a href="index.html">الرئيسية</a>
+          <a href="courses.html">المقررات</a>
+          <a href="community.html">المجتمع</a>
+          <a href="dashboard.html">لوحة الطالب</a>
+        </div>
+        <div class="nav-actions">
+          <button class="lang-toggle" aria-label="Toggle language"><span>EN</span></button>
+          <button class="theme-toggle" aria-label="Toggle theme"><i class="icon">☀</i></button>
+          <a href="login.html" class="btn btn-primary">تسجيل الدخول</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container section-space community-page">
+      <div class="section-heading">
+        <span class="eyebrow">المجتمع</span>
+        <h1>الدردشة العامة والصفوف الخاصة</h1>
+      </div>
+
+      <div class="community-tabs">
+        <button class="community-tab active" data-tab="public">المنتدى العام</button>
+        <button class="community-tab" data-tab="private">الدردشة الخاصة للمقرر</button>
+      </div>
+
+      <div class="community-panel active" data-panel="public">
+        <div class="chat-box glass-card">
+          <div class="chat-messages" id="publicChatMessages"></div>
+          <div class="chat-input-row">
+            <input id="publicChatInput" type="text" placeholder="أكتب سؤالك هنا..." />
+            <button class="btn btn-primary" id="sendPublicChat">إرسال</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="community-panel" data-panel="private">
+        <div class="chat-box glass-card">
+          <label>المقرر<select id="privateCourseSelect"><option value="">اختر مقررًا</option></select></label>
+          <div class="chat-messages" id="privateChatMessages"></div>
+          <div class="chat-input-row">
+            <input id="privateChatInput" type="text" placeholder="رسالة خاصة بالمقرر..." />
+            <button class="btn btn-primary" id="sendPrivateChat">إرسال</button>
+          </div>
+          <p>المحادثة الخاصة متاحة فقط للطلاب المسجلين والمعتمدين في المقرر.</p>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-grid">
+        <div>
+          <a href="index.html" class="brand footer-brand">
+            <img src="assets/logo.png" alt="شعار مركز الإسراء للحقوق" class="brand-logo" />
+            <div class="brand-text">
+              <span class="brand-name">Al-Israa</span>
+              <small>Law Center</small>
+            </div>
+          </a>
+        </div>
+        <div>
+          <h4>مركز الإسراء</h4>
+          <p>تعليم قانوني متميز لكل طلاب الحقوق.</p>
+        </div>
+        <div>
+          <h4>روابط</h4>
+          <ul>
+            <li><a href="courses.html">المقررات</a></li>
+            <li><a href="community.html">المجتمع</a></li>
+            <li><a href="login.html">تسجيل الدخول</a></li>
+          </ul>
+        </div>
+      </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>
