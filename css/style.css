@@ -1587,8 +1587,34 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .container {
+    width: min(100% - 24px, 1180px);
+  }
+
+  .page-main,
+  .section-space {
+    padding-top: 28px;
+  }
+
+  .section-space {
+    padding-bottom: 40px;
+  }
+
+  .site-header {
+    position: sticky;
+  }
+
   .navbar {
     gap: 10px;
+    min-height: 72px;
   }
 
   .brand-text small {
@@ -1616,6 +1642,22 @@ textarea {
 
   .nav-actions {
     flex: 1;
+    min-width: 0;
+  }
+
+  .lang-toggle,
+  .theme-toggle,
+  .notification-trigger,
+  .bell-btn {
+    width: 42px;
+    height: 42px;
+  }
+
+  .nav-actions > .btn {
+    min-width: 94px;
+    width: auto;
+    padding: 0.7rem 0.85rem;
+    font-size: 0.82rem;
   }
 
   .admin-dashboard-link {
@@ -1652,11 +1694,43 @@ textarea {
   }
 
   .hero-copy h1 {
-    font-size: 2.6rem;
+    font-size: clamp(2.15rem, 10vw, 2.6rem);
+  }
+
+  .hero-copy p {
+    font-size: 0.98rem;
+  }
+
+  .hero-section {
+    padding-top: 32px;
+  }
+
+  .cta-row {
+    margin: 24px 0;
+  }
+
+  .cta-row .btn {
+    flex: 1 1 150px;
+  }
+
+  .hero-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .hero-stats div {
+    min-width: 0;
+  }
+
+  .hero-stats strong {
+    font-size: 1.25rem;
+  }
+
+  .hero-stats span {
+    font-size: 0.72rem;
   }
 
   .scene-wrap {
-    min-height: 440px;
+    min-height: 360px;
   }
 
   .hero-emblem {
@@ -1665,6 +1739,14 @@ textarea {
 
   .brands {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .glass-card,
+  .course-card,
+  .content-panel,
+  .panel-block,
+  .chat-box {
+    min-width: 0;
   }
 
   .gradient-panel {
@@ -1679,6 +1761,139 @@ textarea {
 
   .btn {
     width: 100%;
+  }
+
+  .notification-panel {
+    position: fixed;
+    top: 82px;
+    inset-inline: 12px;
+    width: auto;
+    max-height: calc(100vh - 98px);
+  }
+
+  .notification-details-card {
+    max-height: calc(100vh - 32px);
+    padding: 22px 18px;
+  }
+
+  .admin-form input,
+  .admin-form select,
+  .admin-form textarea,
+  .auth-form input,
+  .auth-form select,
+  .auth-form textarea {
+    min-height: 46px;
+  }
+
+  .directory-header {
+    display: none;
+  }
+
+  .directory-row {
+    grid-template-columns: 1fr;
+  }
+
+  .schedule-item,
+  .request-item,
+  .course-item,
+  .review-item,
+  .directory-row {
+    align-items: start;
+  }
+
+  .chat-messages {
+    max-height: 50vh;
+  }
+
+  .chat-input-row input,
+  .chat-input-row .btn {
+    width: 100%;
+  }
+
+  .course-card,
+  .info-card,
+  .curriculum-block,
+  .panel-block {
+    padding: 18px 16px;
+  }
+
+  .watermarked-video {
+    min-height: 210px;
+  }
+
+  .footer-grid,
+  .copyright-bar,
+  .social-link-list {
+    gap: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar {
+    align-items: center;
+  }
+
+  .brand-name {
+    display: none;
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brand-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .nav-actions {
+    gap: 4px;
+  }
+
+  .lang-toggle,
+  .theme-toggle,
+  .notification-trigger,
+  .bell-btn {
+    width: 38px;
+    height: 38px;
+  }
+
+  .nav-actions > .btn {
+    min-width: 76px;
+    padding-inline: 8px;
+  }
+
+  .admin-dashboard-link {
+    display: none;
+  }
+
+  .notification-panel {
+    top: 118px;
+  }
+
+  .hero-stats {
+    gap: 6px;
+  }
+
+  .hero-stats div {
+    padding: 10px 4px;
+  }
+
+  .floating-badge {
+    max-width: 100%;
+  }
+
+  .card-1,
+  .card-2 {
+    max-width: 150px;
+  }
+
+  .scene-wrap {
+    min-height: 320px;
+  }
+
+  .footer-brand {
+    justify-content: flex-start;
   }
 }
 
@@ -1998,9 +2213,5 @@ textarea:focus-visible {
 
   .request-item {
     grid-template-columns: 1fr;
-  }
-
-  .notification-panel {
-    inset-inline-end: -70px;
   }
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'al-israa-v8';
+const CACHE_NAME = 'al-israa-v9';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -49,6 +49,13 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+        return new Response('', { status: 503, statusText: 'Offline' });
+      })
   );
 });

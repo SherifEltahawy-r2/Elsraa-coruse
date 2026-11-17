@@ -3,6 +3,7 @@
   "short_name": "Al-Israa",
   "start_url": "./index.html",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#030B1A",
   "theme_color": "#061838",
   "description": "3D bilingual educational platform for Faculty of Law - Zagazig University.",
