@@ -653,7 +653,7 @@ async function loadProfile() {
   if (!appState.client || !appState.user) return null;
   const { data, error } = await appState.client
     .from('profiles')
-    .select('id,email,full_name,faculty,academic_year,phone,role')
+    .select('id,email,full_name,faculty,academic_year,phone,role,account_status,muted_until,kicked_until')
     .eq('id', appState.user.id)
     .single();
   if (error) throw error;
@@ -933,7 +933,7 @@ function subscribeToAnnouncements() {
     })
     .subscribe();
   appState.client.channel('community-chat')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_messages' }, () => {
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'community_messages' }, () => {
       loadCommunityMessages().catch(reportError);
     })
     .subscribe();
@@ -1133,6 +1133,34 @@ async function loadCourseDetails() {
     } else {
       console.error('Course video URL could not be resolved.', { courseId: data.id, videoPath: data.video_path });
     }
+  }
+  const lessonResult = await appState.client.from('course_videos')
+    .select('id,title_ar,title_en,video_source,sort_order')
+    .eq('course_id', data.id).order('sort_order');
+  if (!lessonResult.error && lessonResult.data?.length) {
+    const extra = document.createElement('div');
+    extra.className = 'course-video-lessons';
+    for (const lesson of lessonResult.data) {
+      const card = document.createElement('article');
+      card.className = 'glass-card lesson-video-card';
+      const title = document.createElement('h3');
+      title.textContent = getLocalized(lesson, 'title');
+      const frame = document.createElement('div');
+      frame.className = 'lesson-video-frame';
+      const source = await resolveCourseVideoUrl(lesson.video_source);
+      if (source) {
+        const video = document.createElement('video');
+        video.controls = true;
+        video.playsInline = true;
+        bindCourseVideo(video, source, /^https?:\/\//i.test(lesson.video_source) ? null : lesson.video_source);
+        frame.appendChild(video);
+      } else {
+        frame.textContent = t('تعذر تحميل الفيديو.', 'The video could not be loaded.');
+      }
+      card.append(title, frame);
+      extra.appendChild(card);
+    }
+    document.querySelector('.course-detail-shell')?.after(extra);
   }
   await renderCourseReviews(data.id);
   if (appState.user) await renderCourseSchedule(data.id);
@@ -1497,7 +1525,7 @@ async function renderStudentDirectory() {
   const target = document.getElementById('studentDirectory');
   if (!target) return;
   const { data, error } = await appState.client.from('profiles')
-    .select('id,email,full_name,phone,faculty,academic_year,role').order('created_at', { ascending: false });
+    .select('id,email,full_name,phone,faculty,academic_year,role,account_status,muted_until,kicked_until').order('created_at', { ascending: false });
   if (error) throw error;
   target.replaceChildren();
   const header = document.createElement('div');
@@ -1508,9 +1536,59 @@ async function renderStudentDirectory() {
   data.forEach((profile) => {
     const row = document.createElement('div');
     row.className = 'directory-row';
-    row.textContent = `${profile.full_name} · ${profile.email} · ${profile.academic_year} · ${profile.phone} · ${profile.role}`;
+    const info = document.createElement('div');
+    info.textContent = `${profile.full_name} · ${profile.email} · الفرقة ${profile.academic_year} · ${profile.phone} · ${profile.role}`;
+    const actions = document.createElement('div');
+    actions.className = 'moderation-actions';
+    const actionsConfig = [
+      ['mute', 'كتم 30 د'],
+      ['kick', 'طرد 30 د'],
+      ['ban', profile.account_status === 'banned' ? 'إلغاء الحظر' : 'حظر'],
+      ['delete', 'حذف الحساب'],
+    ];
+    actionsConfig.forEach(([action, label]) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn btn-secondary';
+      button.textContent = label;
+      button.addEventListener('click', () => moderateProfile(profile, action));
+      actions.appendChild(button);
+    });
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.className = 'btn btn-secondary';
+    reset.textContent = 'إرسال استعادة كلمة المرور';
+    reset.addEventListener('click', () => sendPasswordRecovery(profile.email));
+    actions.appendChild(reset);
+    row.append(info, actions);
     target.appendChild(row);
   });
+}
+
+async function moderateProfile(profile, action) {
+  if (profile.id === appState.user.id) {
+    showToast('لا يمكنك تعديل حسابك الإداري الحالي.', true);
+    return;
+  }
+  if (action === 'delete' && !confirm(`حذف حساب ${profile.email} نهائيًا؟ لا يمكن التراجع.`)) return;
+  if (action === 'ban' && profile.account_status === 'banned') action = 'unban';
+  const { error } = await appState.client.rpc('moderate_profile', {
+    p_profile_id: profile.id,
+    p_action: action,
+    p_minutes: 30,
+  });
+  if (error) return reportError(error);
+  showToast(action === 'delete' ? 'تم حذف الحساب.' : 'تم تنفيذ إجراء الحماية.');
+  await renderStudentDirectory();
+}
+
+async function sendPasswordRecovery(email) {
+  if (!appState.client) return;
+  const { error } = await appState.client.auth.resetPasswordForEmail(email, {
+    redirectTo: `${location.origin}/update-password.html`,
+  });
+  if (error) return reportError(error);
+  showToast('تم إرسال رابط استعادة كلمة المرور إلى بريد المستخدم.');
 }
 
 async function renderAdminSchedules() {
@@ -1650,6 +1728,28 @@ async function saveCourse(event) {
     if (update.error) return reportError(update.error);
   }
 
+  const extraSources = String(values.get('video_sources') || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (extraSources.length) {
+    await appState.client.from('course_videos').delete().eq('course_id', result.data.id);
+    const lessons = extraSources.map((line, index) => {
+      const separator = line.indexOf('|');
+      return {
+        course_id: result.data.id,
+        title_ar: separator >= 0 ? line.slice(0, separator).trim() : `درس ${index + 1}`,
+        title_en: separator >= 0 ? line.slice(0, separator).trim() : `Lesson ${index + 1}`,
+        video_source: separator >= 0 ? line.slice(separator + 1).trim() : line,
+        sort_order: index,
+      };
+    }).filter((lesson) => lesson.video_source);
+    if (lessons.length) {
+      const lessonResult = await appState.client.from('course_videos').insert(lessons);
+      if (lessonResult.error) return reportError(lessonResult.error);
+    }
+  }
+
   showToast(t('تم حفظ المقرر.', 'Course saved.'));
   form.reset();
   await loadAdmin();
@@ -1728,7 +1828,7 @@ async function loadCommunityMessages() {
   const loadList = async (target, courseId) => {
     if (!target) return;
     let query = appState.client.from('community_messages')
-      .select('id,sender_name,body,created_at').order('created_at').limit(100);
+      .select('id,profile_id,sender_name,body,created_at').order('created_at').limit(100);
     query = courseId ? query.eq('course_id', courseId) : query.is('course_id', null);
     const { data, error } = await query;
     if (error) throw error;
@@ -1740,6 +1840,19 @@ async function loadCommunityMessages() {
       const body = document.createElement('span');
       body.textContent = message.body;
       row.append(sender, body);
+      if (isAdmin() || message.profile_id === appState.user.id) {
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'chat-delete';
+        remove.textContent = t('حذف', 'Delete');
+        remove.addEventListener('click', async () => {
+          if (!confirm(t('حذف هذه الرسالة؟', 'Delete this message?'))) return;
+          const result = await appState.client.from('community_messages').delete().eq('id', message.id);
+          if (result.error) return reportError(result.error);
+          await loadCommunityMessages();
+        });
+        row.appendChild(remove);
+      }
       return row;
     }));
   };
@@ -1756,6 +1869,144 @@ function restrictCommunityChat() {
   });
 }
 
+let activeCallRoom = null;
+let callPeer = null;
+let callStream = null;
+let callChannel = null;
+
+async function loadCallRooms() {
+  const select = document.getElementById('callRoomSelect');
+  if (!select || !appState.client || !appState.user) return;
+  const { data, error } = await appState.client.from('call_rooms')
+    .select('id,title,room_type,created_by').order('created_at', { ascending: false }).limit(100);
+  if (error) return reportError(error);
+  select.replaceChildren(new Option(t('اختر غرفة', 'Select a room'), ''));
+  (data || []).forEach((room) => select.add(new Option(room.title, room.id)));
+}
+
+function bindCallControls() {
+  const create = document.getElementById('createCallRoom');
+  const join = document.getElementById('joinCallRoom');
+  const leave = document.getElementById('leaveCallRoom');
+  if (create) create.addEventListener('click', async () => {
+    if (!appState.user) return location.href = 'login.html';
+    const title = prompt(t('اسم غرفة المكالمة', 'Call room name'), t('اجتماع قانوني', 'Law meeting'));
+    if (!title?.trim()) return;
+    const { data, error } = await appState.client.from('call_rooms').insert({
+      title: title.trim(),
+      room_type: 'group',
+      created_by: appState.user.id,
+    }).select().single();
+    if (error) return reportError(error);
+    await loadCallRooms();
+    document.getElementById('callRoomSelect').value = data.id;
+  });
+  if (join) join.addEventListener('click', joinCallRoom);
+  if (leave) leave.addEventListener('click', leaveCallRoom);
+}
+
+async function joinCallRoom() {
+  const roomId = document.getElementById('callRoomSelect')?.value;
+  if (!roomId || !appState.user) return;
+  if (appState.profile?.kicked_until && new Date(appState.profile.kicked_until) > new Date()) {
+    showToast(t('تم طردك مؤقتًا من المكالمات.', 'You are temporarily removed from calls.'), true);
+    return;
+  }
+  try {
+    callStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+  } catch (error) {
+    return reportError(error);
+  }
+  activeCallRoom = roomId;
+  document.getElementById('localCallVideo').srcObject = callStream;
+  await appState.client.from('call_participants').upsert({
+    room_id: roomId,
+    profile_id: appState.user.id,
+    left_at: null,
+  }, { onConflict: 'room_id,profile_id' });
+  callPeer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  callStream.getTracks().forEach((track) => callPeer.addTrack(track, callStream));
+  callPeer.ontrack = (event) => {
+    document.getElementById('remoteCallVideo').srcObject = event.streams[0];
+  };
+  callPeer.onicecandidate = async (event) => {
+    if (!event.candidate) return;
+    await appState.client.from('call_signals').insert({
+      room_id: roomId,
+      sender_id: appState.user.id,
+      signal: { candidate: event.candidate },
+    });
+  };
+  const offer = await callPeer.createOffer();
+  await callPeer.setLocalDescription(offer);
+  await appState.client.from('call_signals').insert({
+    room_id: roomId,
+    sender_id: appState.user.id,
+    signal: { description: callPeer.localDescription },
+  });
+  callChannel = appState.client.channel(`call-${roomId}`)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'call_signals',
+      filter: `room_id=eq.${roomId}`,
+    }, async ({ new: signal }) => {
+      if (!callPeer || signal.sender_id === appState.user.id) return;
+      if (signal.signal.description) {
+        await callPeer.setRemoteDescription(signal.signal.description);
+        if (signal.signal.description.type === 'offer') {
+          const answer = await callPeer.createAnswer();
+          await callPeer.setLocalDescription(answer);
+          await appState.client.from('call_signals').insert({
+            room_id: roomId,
+            sender_id: appState.user.id,
+            receiver_id: signal.sender_id,
+            signal: { description: callPeer.localDescription },
+          });
+        }
+      } else if (signal.signal.candidate) {
+        await callPeer.addIceCandidate(signal.signal.candidate);
+      }
+    })
+    .subscribe();
+  document.getElementById('joinCallRoom').hidden = true;
+  document.getElementById('leaveCallRoom').hidden = false;
+  await renderCallParticipants(roomId);
+}
+
+async function leaveCallRoom() {
+  if (activeCallRoom && appState.user) {
+    await appState.client.from('call_participants').update({ left_at: new Date().toISOString() })
+      .eq('room_id', activeCallRoom).eq('profile_id', appState.user.id);
+  }
+  callStream?.getTracks().forEach((track) => track.stop());
+  callPeer?.close();
+  if (callChannel) appState.client.removeChannel(callChannel);
+  activeCallRoom = null;
+  callPeer = null;
+  callStream = null;
+  document.getElementById('joinCallRoom').hidden = false;
+  document.getElementById('leaveCallRoom').hidden = true;
+  document.getElementById('localCallVideo').srcObject = null;
+  document.getElementById('remoteCallVideo').srcObject = null;
+  document.getElementById('callParticipants').replaceChildren();
+}
+
+async function renderCallParticipants(roomId) {
+  const target = document.getElementById('callParticipants');
+  if (!target) return;
+  const { data, error } = await appState.client.from('call_participants')
+    .select('profile_id,joined_at,left_at,profile:profiles(full_name,role)')
+    .eq('room_id', roomId).is('left_at', null);
+  if (error) return reportError(error);
+  target.replaceChildren(...(data || []).map((participant) => {
+    const item = document.createElement('span');
+    item.className = 'call-participant';
+    item.textContent = `${participant.profile?.full_name || ''} · ${participant.profile?.role === 'admin' ? t('مسؤول', 'Administrator') : t('طالب', 'Student')}`;
+    return item;
+  }));
+}
+
 function bindCommunityChat() {
   const formBindings = [
     { input: document.getElementById('publicChatInput'), button: document.getElementById('sendPublicChat'), courseId: null },
@@ -1766,6 +2017,10 @@ function bindCommunityChat() {
     button.addEventListener('click', async () => {
       if (!appState.user) {
         location.href = 'login.html';
+        return;
+      }
+      if (appState.profile?.muted_until && new Date(appState.profile.muted_until) > new Date()) {
+        showToast(t('تم كتم حسابك مؤقتًا.', 'Your account is temporarily muted.'), true);
         return;
       }
       const body = input.value.trim();
@@ -1930,6 +2185,7 @@ async function initialize() {
     saveProfile(event).catch(reportError);
   });
   bindCommunityChat();
+  bindCallControls();
 
   appState.client = getClient();
   if (!appState.client) {
@@ -1964,6 +2220,12 @@ async function initialize() {
   if (appState.user) {
     try {
       await loadProfile();
+      if (appState.profile?.account_status === 'banned') {
+        await appState.client.auth.signOut();
+        appState.user = null;
+        showToast(t('تم حظر هذا الحساب.', 'This account has been banned.'), true);
+        return;
+      }
       updateNavigation();
       await guardPage();
       await loadAnnouncements();
@@ -1973,6 +2235,7 @@ async function initialize() {
       await loadAdmin();
       await populateCommunityCourses();
       await loadCommunityMessages();
+      await loadCallRooms();
     } catch (error) {
       reportError(error);
     }

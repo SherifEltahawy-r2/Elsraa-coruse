@@ -19,6 +19,12 @@ in the SQL Editor. It creates the public social-link settings row, which only
 administrators can update from the dashboard. The same migration also adds
 editable website copyright and R2J WEB DEV developer-credit fields.
 
+Then run `supabase-safety-migration.sql` to enable account moderation, account
+status, temporary mute/kick controls, extra course videos, message deletion,
+and call-room tables. The SQL migration uses administrator-only RPC functions.
+Password recovery is always sent through Supabase email; passwords are never
+read or displayed by this website.
+
 ## 2. Require confirmed email
 
 In **Authentication → Providers → Email**, enable email confirmation. In

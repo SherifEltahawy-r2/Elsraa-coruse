@@ -1357,6 +1357,89 @@ textarea {
   gap: 12px;
 }
 
+.chat-message {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-delete {
+  justify-self: end;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 122, 122, 0.12);
+  color: var(--danger);
+  font-size: 0.82rem;
+}
+
+.moderation-actions,
+.call-controls,
+.call-participants,
+.course-video-lessons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.directory-row {
+  align-items: center;
+  grid-template-columns: minmax(240px, 1fr) auto;
+}
+
+.directory-row .moderation-actions {
+  justify-content: flex-end;
+}
+
+.moderation-actions .btn {
+  padding: 0.55rem 0.75rem;
+  font-size: 0.78rem;
+}
+
+.call-room-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.call-videos {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.call-videos video,
+.lesson-video-frame video {
+  width: 100%;
+  min-height: 180px;
+  max-height: 420px;
+  border-radius: 16px;
+  background: #020714;
+  object-fit: cover;
+}
+
+.call-participant {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: rgba(212, 175, 55, 0.08);
+}
+
+.course-video-lessons {
+  margin-top: 24px;
+}
+
+.lesson-video-card {
+  flex: 1 1 320px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.lesson-video-frame {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+}
+
 .call-banner {
   display: flex;
   flex-wrap: wrap;
@@ -2258,6 +2341,26 @@ textarea:focus-visible {
   }
 
   .request-item {
+    grid-template-columns: 1fr;
+  }
+
+  .directory-row {
+    grid-template-columns: 1fr;
+  }
+
+  .directory-row .moderation-actions {
+    justify-content: flex-start;
+  }
+
+  .call-videos {
+    grid-template-columns: 1fr;
+  }
+
+  .call-controls {
+    display: grid;
+  }
+
+  .chat-message {
     grid-template-columns: 1fr;
   }
 }
