@@ -17,6 +17,7 @@ const textMap = {
   'الرئيسية': 'Home',
   'المقررات': 'Courses',
   'المجتمع': 'Community',
+  'الانضمام إلى مكالمة المقرر': 'Join course call',
   'لوحة الطالب': 'Student dashboard',
   'تسجيل الدخول': 'Sign in',
   'تسجيل الخروج': 'Sign out',
@@ -168,7 +169,7 @@ const textMap = {
   'تشغيل الميكروفون': 'Unmute microphone',
   'إيقاف الكاميرا': 'Turn camera off',
   'تشغيل الكاميرا': 'Turn camera on',
-  'مغادرة المكالمة': 'Leave call',
+  'مغادرة المكالمة': 'Leave Call',
   'متواجد': 'Present',
   'أنت': 'You',
   'مشارك': 'Participant',
@@ -816,10 +817,9 @@ function toggleLanguage() {
   loadCourseDetails().catch(reportError);
   loadDashboard().catch(reportError);
   loadCommunityMessages().catch(reportError);
-  loadCallRooms().catch(reportError);
+  populateCallCourses().catch(reportError);
   renderCommunityPresence();
   for (const roomKey of typingMembers.keys()) renderTypingStatus(roomKey);
-  if (activeCallRoom) renderCallParticipants(activeCallRoom).catch(reportError);
   if (isAdmin()) {
     renderStudentDirectory().catch(reportError);
   }
@@ -2246,181 +2246,155 @@ function restrictCommunityChat() {
   document.querySelectorAll('#publicChatMessages, #privateChatMessages').forEach((list) => {
     list.textContent = t('سجّل الدخول لعرض المحادثات وإرسال الرسائل.', 'Sign in to view conversations and send messages.');
   });
-  document.querySelectorAll('#createCallRoom, #joinAudioCall, #joinVideoCall, #callRoomSelect, #callRoomType')
+  document.querySelectorAll('#jitsiCourseSelect, #startJitsiCall')
     .forEach((control) => { control.disabled = true; });
 }
 
-let activeCallRoom = null;
-let callStream = null;
-let callChannel = null;
-let callParticipantsChannel = null;
-const callPeers = new Map();
-const remoteStreams = new Map();
-let callMode = 'video';
-let callJoinPending = false;
 let communityActivityChannel = null;
 let communityTypingChannel = null;
 const typingMembers = new Map();
 const typingTimeouts = new Map();
 let lastTypingBroadcast = 0;
 let typingIdleTimeout = null;
-const speakingAnimations = new Map();
-const callTiles = new Map();
 
-async function loadCallRooms() {
-  const select = document.getElementById('callRoomSelect');
-  if (!select || !appState.client || !appState.user) return;
-  const { data, error } = await appState.client.from('call_rooms')
-    .select('id,title,room_type,created_by').order('created_at', { ascending: false }).limit(100);
-  if (error) return reportError(error);
-  select.replaceChildren(new Option(t('اختر غرفة', 'Select a room'), ''));
-  (data || []).forEach((room) => select.add(new Option(room.title, room.id)));
+async function populateCallCourses() {
+  const select = document.getElementById('jitsiCourseSelect');
+  if (!select || !appState.client || !appState.user || activeJitsiCall) return;
+  const selectedCourse = select.value;
+  let data;
+  let error;
+  if (isAdmin()) {
+    ({ data, error } = await appState.client.from('courses')
+      .select('id,title_ar,title_en').order('title_ar'));
+  } else {
+    ({ data, error } = await appState.client.from('enrollments')
+      .select('course_id,course:courses(title_ar,title_en)')
+      .eq('profile_id', appState.user.id).eq('status', 'approved'));
+  }
+  if (error) throw error;
+  select.replaceChildren(new Option(t('اختر مقررًا', 'Select a course'), ''));
+  (data || []).forEach((row) => {
+    const course = isAdmin() ? row : row.course;
+    if (course) select.add(new Option(getLocalized(course, 'title'), isAdmin() ? row.id : row.course_id));
+  });
+  if ([...select.options].some((option) => option.value === selectedCourse)) {
+    select.value = selectedCourse;
+  }
 }
 
 function bindCallControls() {
-  const create = document.getElementById('createCallRoom');
-  const joinAudio = document.getElementById('joinAudioCall');
-  const joinVideo = document.getElementById('joinVideoCall');
-  const leave = document.getElementById('leaveCallRoom');
-  const mute = document.getElementById('toggleCallMute');
-  const camera = document.getElementById('toggleCallCamera');
-  if (create) create.addEventListener('click', async () => {
-    if (!appState.user) return location.href = 'login.html';
-    const title = prompt(t('اسم غرفة المكالمة', 'Call room name'), t('اجتماع قانوني', 'Law meeting'));
-    if (!title?.trim()) return;
-    const roomType = document.getElementById('callRoomType')?.value || 'group';
-    const { data, error } = await appState.client.from('call_rooms').insert({
-      title: title.trim(),
-      room_type: roomType,
-      created_by: appState.user.id,
-    }).select().single();
-    if (error) return reportError(error);
-    await loadCallRooms();
-    document.getElementById('callRoomSelect').value = data.id;
+  document.getElementById('startJitsiCall')?.addEventListener('click', () => {
+    startJitsiCall().catch(reportError);
   });
-  if (joinAudio) joinAudio.addEventListener('click', () => joinCallRoom('audio'));
-  if (joinVideo) joinVideo.addEventListener('click', () => joinCallRoom('video'));
-  if (leave) leave.addEventListener('click', leaveCallRoom);
-  if (mute) mute.addEventListener('click', () => {
-    if (!callStream) return;
-    const track = callStream.getAudioTracks()[0];
-    if (!track) return;
-    track.enabled = !track.enabled;
-    mute.textContent = track.enabled ? t('كتم الميكروفون', 'Mute microphone') : t('تشغيل الميكروفون', 'Unmute microphone');
+  document.getElementById('leaveJitsiCall')?.addEventListener('click', () => closeJitsiCall());
+}
+
+let activeJitsiCall = null;
+let jitsiApiScriptPromise = null;
+
+function loadJitsiExternalApi() {
+  if (window.JitsiMeetExternalAPI) return Promise.resolve();
+  if (jitsiApiScriptPromise) return jitsiApiScriptPromise;
+  jitsiApiScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://meet.jit.si/external_api.js';
+    script.async = true;
+    script.onload = resolve;
+    script.onerror = () => {
+      jitsiApiScriptPromise = null;
+      reject(new Error(t('تعذر تحميل خدمة المكالمات.', 'Could not load the call service.')));
+    };
+    document.head.appendChild(script);
   });
-  if (camera) camera.addEventListener('click', () => {
-    if (!callStream) return;
-    const track = callStream.getVideoTracks()[0];
-    if (!track) return;
-    track.enabled = !track.enabled;
-    camera.textContent = track.enabled ? t('إيقاف الكاميرا', 'Turn camera off') : t('تشغيل الكاميرا', 'Turn camera on');
-  });
+  return jitsiApiScriptPromise;
 }
 
-function getCommunityMember(profileId) {
-  return appState.communityMembers.find((member) => member.id === profileId);
-}
-
-function setCallAvatar(image, fallback, member) {
-  const url = avatarPublicUrl(member?.avatar_path);
-  image.src = url || '';
-  image.hidden = !url;
-  fallback.hidden = Boolean(url);
-  fallback.textContent = firstName(member?.first_name || member?.profile_name).charAt(0).toUpperCase();
-  image.onerror = () => {
-    image.hidden = true;
-    fallback.hidden = false;
-  };
-}
-
-function ensureCallTile(profileId, member, local = false) {
-  const tileId = local ? 'localCallTile' : `call-tile-${profileId}`;
-  let tile = document.getElementById(tileId);
-  if (local && tile) tile.hidden = false;
-  if (!tile) {
-    tile = document.createElement('div');
-    tile.id = tileId;
-    tile.className = 'call-user-tile';
-    const avatar = document.createElement('img');
-    avatar.className = 'call-avatar';
-    avatar.alt = '';
-    avatar.hidden = true;
-    const fallback = document.createElement('span');
-    fallback.className = 'call-avatar-fallback';
-    const video = document.createElement('video');
-    video.id = `remote-video-${profileId}`;
-    video.autoplay = true;
-    video.playsInline = true;
-    const name = document.createElement('span');
-    name.className = 'call-user-name';
-    tile.append(avatar, fallback, video, name);
-    document.getElementById('remoteCallVideos')?.appendChild(tile);
-  }
-  const avatar = tile.querySelector('.call-avatar');
-  const fallback = tile.querySelector('.call-avatar-fallback');
-  const name = tile.querySelector('.call-user-name');
-  if (avatar && fallback) setCallAvatar(avatar, fallback, member);
-  const videoActive = local
-    ? callMode === 'video' && Boolean(callStream?.getVideoTracks().length)
-    : Boolean(remoteStreams.get(profileId)?.getVideoTracks().length);
-  if (avatar && fallback && videoActive) {
-    avatar.hidden = true;
-    fallback.hidden = true;
-  }
-  if (name) name.textContent = firstName(member?.first_name || member?.profile_name);
-  callTiles.set(profileId, tile);
-  return tile;
-}
-
-function animateSpeaking(stream, key, tile) {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass || !stream.getAudioTracks().length || speakingAnimations.has(key)) return;
-  let context;
-  let analyser;
-  try {
-    context = new AudioContextClass();
-    analyser = context.createAnalyser();
-    analyser.fftSize = 512;
-    context.createMediaStreamSource(stream).connect(analyser);
-    if (context.state === 'suspended') {
-      context.resume().catch((error) => console.error('Could not resume the call audio analyzer.', error));
-    }
-  } catch (error) {
-    console.error('Could not start the call audio analyzer.', error);
-    if (context) context.close().catch((closeError) => console.error(closeError));
+async function startJitsiCall() {
+  const courseId = document.getElementById('jitsiCourseSelect')?.value;
+  const start = document.getElementById('startJitsiCall');
+  if (!appState.user) {
+    location.href = 'login.html';
     return;
   }
-  const samples = new Uint8Array(analyser.fftSize);
-  let frame = 0;
-  const measure = () => {
-    analyser.getByteTimeDomainData(samples);
-    let energy = 0;
-    for (const sample of samples) {
-      const amplitude = (sample - 128) / 128;
-      energy += amplitude * amplitude;
+  if (activeJitsiCall) return;
+  if (!courseId) {
+    showToast(t('اختر مقررًا أولاً.', 'Select a course first.'), true);
+    return;
+  }
+  start.disabled = true;
+  try {
+    if (!isAdmin()) {
+      const { data: enrollment, error } = await appState.client.from('enrollments')
+        .select('course_id').eq('profile_id', appState.user.id)
+        .eq('course_id', courseId).eq('status', 'approved').maybeSingle();
+      if (error) throw error;
+      if (!enrollment) {
+        showToast(t('المكالمات متاحة للمشتركين المعتمدين في المقرر فقط.', 'Calls are available only to approved course subscribers.'), true);
+        return;
+      }
     }
-    const speaking = Math.sqrt(energy / samples.length) > 0.045;
-    tile.classList.toggle('is-speaking', speaking);
-    document.getElementById(`call-participant-${key}`)?.classList.toggle('is-speaking', speaking);
-    frame = requestAnimationFrame(measure);
-  };
-  measure();
-  speakingAnimations.set(key, {
-    stop: () => {
-      cancelAnimationFrame(frame);
-      tile.classList.remove('is-speaking');
-      context.close().catch((error) => console.error('Could not close the call audio analyzer.', error));
-    },
-  });
+
+    const { data: profile, error: profileError } = await appState.client.from('profiles')
+      .select('full_name,email').eq('id', appState.user.id).single();
+    if (profileError) throw profileError;
+    if (!profile?.full_name || !profile?.email) {
+      throw new Error(t('بيانات الاسم والبريد غير متاحة في الملف الشخصي.', 'Registered name and email are missing from the profile.'));
+    }
+
+    await loadJitsiExternalApi();
+    const host = document.getElementById('jitsiCallHost');
+    const container = document.createElement('div');
+    container.id = 'jitsiMeetingContainer';
+    container.className = 'jitsi-meeting-container';
+    host.replaceChildren(container);
+    host.hidden = false;
+    const api = new window.JitsiMeetExternalAPI('meet.jit.si', {
+      roomName: `AlIsraaLaw_Course_${courseId}_SecureRoom`,
+      parentNode: container,
+      width: '100%',
+      height: '72vh',
+      userInfo: { displayName: profile.full_name, email: profile.email },
+      configOverwrite: {
+        prejoinPageEnabled: false,
+        disableInviteFunctions: true,
+      },
+      interfaceConfigOverwrite: { HIDE_INVITE_MORE_HEADER: true },
+    });
+    activeJitsiCall = api;
+    document.getElementById('jitsiCourseSelect').disabled = true;
+    start.hidden = true;
+    document.getElementById('leaveJitsiCall').hidden = false;
+    api.addEventListener('readyToClose', () => closeJitsiCall(false));
+  } catch (error) {
+    closeJitsiCall(false);
+    throw error;
+  } finally {
+    if (!activeJitsiCall) start.disabled = false;
+  }
 }
 
-function stopSpeakingAnimation(key) {
-  speakingAnimations.get(key)?.stop();
-  speakingAnimations.delete(key);
+function closeJitsiCall(disposeApi = true) {
+  const api = activeJitsiCall;
+  activeJitsiCall = null;
+  if (disposeApi && api) {
+    try {
+      api.dispose();
+    } catch (error) {
+      reportError(error);
+    }
+  }
+  document.getElementById('jitsiCallHost')?.replaceChildren();
+  const host = document.getElementById('jitsiCallHost');
+  if (host) host.hidden = true;
+  const select = document.getElementById('jitsiCourseSelect');
+  if (select) select.disabled = false;
+  const start = document.getElementById('startJitsiCall');
+  if (start) start.hidden = false;
+  const leave = document.getElementById('leaveJitsiCall');
+  if (leave) leave.hidden = true;
 }
 
-async function createCallPeer(roomId, remoteUserId) {
-  if (!remoteUserId || remoteUserId === appState.user.id) return null;
+/*
   if (callPeers.has(remoteUserId)) return callPeers.get(remoteUserId);
   const peer = new RTCPeerConnection({
     iceServers: [
@@ -2470,7 +2444,6 @@ async function createCallPeer(roomId, remoteUserId) {
       remoteStreams.delete(remoteUserId);
     }
   };
-  peer.pendingCandidates = [];
   callPeers.set(remoteUserId, peer);
   return peer;
 }
@@ -2681,6 +2654,7 @@ async function renderCallParticipants(roomId) {
   }));
 }
 
+*/
 function bindCommunityChat() {
   const formBindings = [
     { input: document.getElementById('publicChatInput'), button: document.getElementById('sendPublicChat'), courseId: null },
@@ -2919,7 +2893,7 @@ async function initialize() {
       await loadAdmin();
       await populateCommunityCourses();
       await loadCommunityMessages();
-      await loadCallRooms();
+      await populateCallCourses();
       if (document.getElementById('publicTyping')) {
         await loadTypingStatus('public').catch(reportError);
         const selectedCourse = document.getElementById('privateCourseSelect')?.value;
@@ -2936,7 +2910,17 @@ async function initialize() {
 
   appState.client.auth.onAuthStateChange((_event, session) => {
     appState.user = session?.user || null;
-    if (!appState.user) appState.profile = null;
+    if (!appState.user) {
+      appState.profile = null;
+      closeJitsiCall();
+      const callCourseSelect = document.getElementById('jitsiCourseSelect');
+      const startCallButton = document.getElementById('startJitsiCall');
+      if (callCourseSelect) callCourseSelect.disabled = true;
+      if (startCallButton) startCallButton.disabled = true;
+      document.getElementById('jitsiCourseSelect')?.replaceChildren(
+        new Option(t('اختر مقررًا', 'Select a course'), ''),
+      );
+    }
     updateNavigation();
   });
 }

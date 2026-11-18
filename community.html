@@ -82,30 +82,11 @@
       <div class="community-panel" data-panel="calls">
         <div class="glass-card call-room-panel">
           <div class="call-controls">
-            <label>غرفة المكالمة<select id="callRoomSelect"><option value="">اختر غرفة</option></select></label>
-            <label>نوع الغرفة
-              <select id="callRoomType">
-                <option value="group">مكالمة جماعية</option>
-                <option value="private">مكالمة خاصة</option>
-              </select>
-            </label>
-            <button class="btn btn-secondary" id="createCallRoom" type="button">إنشاء غرفة مكالمة</button>
-            <button class="btn btn-primary" id="joinAudioCall" type="button">مكالمة صوتية</button>
-            <button class="btn btn-primary" id="joinVideoCall" type="button">مكالمة فيديو</button>
-            <button class="btn btn-secondary" id="toggleCallMute" type="button" hidden>كتم الميكروفون</button>
-            <button class="btn btn-secondary" id="toggleCallCamera" type="button" hidden>إيقاف الكاميرا</button>
-            <button class="btn btn-secondary" id="leaveCallRoom" type="button" hidden>مغادرة المكالمة</button>
+            <label>المقرر<select id="jitsiCourseSelect"><option value="">اختر مقررًا</option></select></label>
+            <button class="btn btn-primary" id="startJitsiCall" type="button">الانضمام إلى مكالمة المقرر</button>
+            <button class="btn btn-secondary" id="leaveJitsiCall" type="button" hidden>مغادرة المكالمة</button>
           </div>
-          <div class="call-videos">
-            <div class="call-user-tile" id="localCallTile" hidden>
-              <img class="call-avatar" id="localCallAvatar" alt="" hidden />
-              <span class="call-avatar-fallback" id="localCallAvatarFallback"></span>
-              <video id="localCallVideo" autoplay muted playsinline></video>
-              <span class="call-user-name" id="localCallName"></span>
-            </div>
-            <div id="remoteCallVideos" class="remote-call-videos"></div>
-          </div>
-          <div id="callParticipants" class="call-participants" aria-live="polite"></div>
+          <div id="jitsiCallHost" class="jitsi-call-host" hidden></div>
         </div>
       </div>
     </main>

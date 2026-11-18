@@ -1452,6 +1452,28 @@ textarea {
   gap: 18px;
 }
 
+.jitsi-call-host {
+  overflow: hidden;
+  min-height: 320px;
+  border: 1px solid rgba(212, 175, 55, 0.58);
+  border-radius: 20px;
+  background: linear-gradient(145deg, #10203a, #030b1a);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.38), inset 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.jitsi-meeting-container {
+  width: 100%;
+  min-height: min(72vh, 760px);
+}
+
+.jitsi-meeting-container iframe {
+  display: block;
+  width: 100%;
+  min-height: min(72vh, 760px);
+  border: 0;
+  background: #030b1a;
+}
+
 .call-videos {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
