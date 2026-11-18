@@ -1072,6 +1072,36 @@ async function loadCommunityMembers() {
   renderCommunityPresence();
 }
 
+function getCommunityMember(profileId = appState.user?.id) {
+  if (!profileId) {
+    return { id: null, full_name: 'زائر / Guest', email: '', role: 'guest' };
+  }
+
+  if (profileId === appState.user?.id) {
+    const fullName = appState.profile?.full_name
+      || appState.user?.user_metadata?.full_name
+      || 'زائر / Guest';
+    return {
+      id: appState.user.id,
+      full_name: fullName,
+      first_name: firstName(fullName),
+      email: appState.profile?.email || appState.user.email || '',
+      role: appState.profile?.role || 'student',
+      avatar_path: appState.profile?.avatar_path || null,
+    };
+  }
+
+  const member = appState.communityMembers.find((item) => item.id === profileId);
+  if (!member) return null;
+  const fullName = member.full_name || member.first_name || '';
+  return {
+    ...member,
+    full_name: fullName,
+    first_name: member.first_name || firstName(fullName),
+    email: member.email || '',
+  };
+}
+
 function subscribeToCommunityActivity() {
   if (!appState.client || !appState.user) return;
   communityActivityChannel = appState.client.channel('community-activity', {
@@ -2015,11 +2045,12 @@ async function renderAdminLiveCalls() {
     .order('created_at', { ascending: false });
   if (error) throw error;
 
-  if (!data.length) {
+  const calls = Array.isArray(data) ? data : [];
+  if (!calls.length) {
     target.textContent = t('لا توجد مكالمات مباشرة.', 'No live calls yet.');
     return;
   }
-  target.replaceChildren(...data.map((call) => {
+  target.replaceChildren(...calls.map((call) => {
     const row = document.createElement('article');
     row.className = 'live-call-item live-call-admin-row';
     const detail = document.createElement('div');
@@ -2419,23 +2450,68 @@ function bindCallControls() {
 let activeLiveCall = null;
 let liveCallJoinPending = false;
 let jitsiApiScriptPromise = null;
+let loadedJitsiServer = null;
+const jitsiServers = ['meet.ffmuc.net', 'meet.guifi.net', 'jitsi.member.fsf.org', 'meet.jit.si'];
 
 function loadJitsiExternalApi() {
-  if (window.JitsiMeetExternalAPI) return Promise.resolve();
+  if (window.JitsiMeetExternalAPI) return Promise.resolve(loadedJitsiServer || jitsiServers[0]);
   if (jitsiApiScriptPromise) return jitsiApiScriptPromise;
-  jitsiApiScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://meet.ffmuc.net/external_api.js';
-    script.async = true;
-    script.crossOrigin = 'anonymous';
-    script.onload = resolve;
-    script.onerror = () => {
-      jitsiApiScriptPromise = null;
-      reject(new Error(t('تعذر تحميل خدمة المكالمات.', 'Could not load the call service.')));
-    };
-    document.head.appendChild(script);
+  jitsiApiScriptPromise = new Promise((resolve) => {
+    const scripts = [];
+    let remaining = jitsiServers.length;
+    let settled = false;
+    const timeoutId = window.setTimeout(() => finish(null), 3000);
+
+    function finish(server) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      scripts.forEach((script) => script.remove());
+      loadedJitsiServer = server;
+      resolve(server);
+    }
+
+    function failed() {
+      remaining -= 1;
+      if (!remaining) finish(null);
+    }
+
+    jitsiServers.forEach((server) => {
+      const script = document.createElement('script');
+      script.src = `https://${server}/external_api.js`;
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.onload = () => {
+        if (window.JitsiMeetExternalAPI) finish(server);
+        else failed();
+      };
+      script.onerror = failed;
+      scripts.push(script);
+      try {
+        document.head.appendChild(script);
+      } catch (error) {
+        console.warn(`Could not load the Jitsi API from ${server}.`, error);
+        failed();
+      }
+    });
+  });
+  jitsiApiScriptPromise = jitsiApiScriptPromise.then((server) => {
+    if (!server) jitsiApiScriptPromise = null;
+    return server;
   });
   return jitsiApiScriptPromise;
+}
+
+function renderJitsiIframeFallback(host, call, userName) {
+  const container = document.createElement('div');
+  container.className = 'jitsi-meeting-container';
+  const iframe = document.createElement('iframe');
+  iframe.title = t('المكالمة المباشرة', 'Live call');
+  iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
+  iframe.src = `https://ffmuc.net/${encodeURIComponent(call.room_slug)}`
+    + `#config.prejoinPageEnabled=false&config.requireDisplayName=false&userInfo.displayName=${encodeURIComponent(userName)}`;
+  container.appendChild(iframe);
+  host.replaceChildren(container);
 }
 
 async function joinLiveCall(call, hostId, leaveButtonId) {
@@ -2444,40 +2520,53 @@ async function joinLiveCall(call, hostId, leaveButtonId) {
     return;
   }
   const host = document.getElementById(hostId);
+  if (!host) throw new Error(`Live call host "${hostId}" was not found.`);
   liveCallJoinPending = true;
   try {
-    await loadJitsiExternalApi();
+    const jitsiServer = await loadJitsiExternalApi();
     const leaveButton = document.getElementById(leaveButtonId);
-    const container = document.createElement('div');
-    container.className = 'jitsi-meeting-container';
-    host.replaceChildren(container);
     host.hidden = false;
 
-    const displayName = appState.profile?.full_name
-      || appState.user?.user_metadata?.full_name
-      || t('زائر / Guest', 'Guest');
-    const api = new window.JitsiMeetExternalAPI('meet.ffmuc.net', {
-      roomName: call.room_slug,
-      parentNode: container,
-      width: '100%',
-      height: '72vh',
-      userInfo: { displayName },
-      configOverwrite: {
-        prejoinPageEnabled: false,
-        requireDisplayName: false,
-        enableLobbyChat: false,
-        disableDeepLinking: true,
-        disableInviteFunctions: true,
-      },
-      interfaceConfigOverwrite: { HIDE_INVITE_MORE_HEADER: true },
-    });
-    activeLiveCall = { api, hostId, leaveButtonId };
-    leaveButton.hidden = false;
-    api.addEventListener('readyToClose', () => closeLiveCall(false));
-  } catch (error) {
-    host?.replaceChildren();
-    if (host) host.hidden = true;
-    throw error;
+    const displayName = getCommunityMember().full_name;
+    let api = null;
+    if (jitsiServer && window.JitsiMeetExternalAPI) {
+      const container = document.createElement('div');
+      container.className = 'jitsi-meeting-container';
+      host.replaceChildren(container);
+      try {
+        api = new window.JitsiMeetExternalAPI(jitsiServer, {
+          roomName: call.room_slug,
+          parentNode: container,
+          width: '100%',
+          height: '72vh',
+          userInfo: { displayName },
+          configOverwrite: {
+            prejoinPageEnabled: false,
+            requireDisplayName: false,
+            enableLobbyChat: false,
+            disableDeepLinking: true,
+            disableInviteFunctions: true,
+          },
+          interfaceConfigOverwrite: { HIDE_INVITE_MORE_HEADER: true },
+        });
+        activeLiveCall = { api, hostId, leaveButtonId };
+        api.addEventListener('readyToClose', () => closeLiveCall(false));
+      } catch (error) {
+        console.warn('Jitsi API could not start; using the iframe fallback.', error);
+        try {
+          api?.dispose();
+        } catch (disposeError) {
+          console.warn('Could not dispose the failed Jitsi API instance.', disposeError);
+        }
+        activeLiveCall = null;
+      }
+    }
+
+    if (!activeLiveCall) {
+      renderJitsiIframeFallback(host, call, displayName);
+      activeLiveCall = { api: null, hostId, leaveButtonId };
+    }
+    if (leaveButton) leaveButton.hidden = false;
   } finally {
     liveCallJoinPending = false;
   }
@@ -2487,7 +2576,7 @@ function closeLiveCall(disposeApi = true) {
   const activeCall = activeLiveCall;
   activeLiveCall = null;
   if (!activeCall) return;
-  if (disposeApi) {
+  if (disposeApi && activeCall.api) {
     try {
       activeCall.api.dispose();
     } catch (error) {
@@ -2511,7 +2600,7 @@ async function loadCommunityLiveCalls() {
     .eq('is_active', true).order('created_at', { ascending: false });
   if (error) throw error;
 
-  const calls = data || [];
+  const calls = Array.isArray(data) ? data : [];
   [
     { type: 'group', target: groupTarget, title: t('لا توجد مكالمات جماعية نشطة.', 'No active group calls.') },
     { type: 'private', target: privateTarget, title: t('لا توجد مكالمات خاصة نشطة.', 'No active private calls.') },
