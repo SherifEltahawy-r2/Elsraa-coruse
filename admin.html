@@ -9,6 +9,8 @@
     <link rel="manifest" href="manifest.json" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://meet.ffmuc.net" crossorigin />
+    <link rel="preload" href="https://meet.ffmuc.net/external_api.js" as="script" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@200;300;400;500;600;700;800;900&family=Cinzel:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="css/style.css" />
   </head>
@@ -65,6 +67,28 @@
         </section>
         <section class="glass-card panel-block"><h2>طلبات التسجيل</h2><div id="adminRequests" class="request-list"></div></section>
       </div>
+
+      <section class="glass-card panel-block section-space-sm">
+        <h2>إدارة المكالمات المباشرة</h2>
+        <form id="liveCallForm" class="admin-form">
+          <input type="hidden" name="live_call_id" />
+          <div class="field-row">
+            <label>اسم المكالمة بالعربية<input name="title_ar" required maxlength="140" /></label>
+            <label>اسم المكالمة بالإنجليزية<input name="title_en" required maxlength="140" /></label>
+          </div>
+          <label>نوع المكالمة
+            <select name="call_type" required>
+              <option value="group">مكالمة جماعية</option>
+              <option value="private">مكالمة خاصة</option>
+            </select>
+          </label>
+          <label class="checkbox-row"><input name="is_active" type="checkbox" checked /> مكالمة نشطة</label>
+          <button class="btn btn-primary" type="submit">حفظ المكالمة</button>
+        </form>
+        <div id="adminLiveCalls" class="live-call-admin-list"></div>
+        <div id="adminLiveCallHost" class="jitsi-call-host" hidden></div>
+        <button class="btn btn-secondary" id="leaveAdminLiveCall" type="button" hidden>مغادرة المكالمة</button>
+      </section>
 
       <div class="admin-grid section-space-sm">
         <section class="glass-card panel-block">

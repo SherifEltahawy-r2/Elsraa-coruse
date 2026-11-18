@@ -9,6 +9,8 @@
     <link rel="manifest" href="manifest.json" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://meet.ffmuc.net" crossorigin />
+    <link rel="preload" href="https://meet.ffmuc.net/external_api.js" as="script" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@400;700&family=Cairo:wght@200;300;400;500;600;700;800;900&family=Cinzel:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="css/style.css" />
   </head>
@@ -81,12 +83,18 @@
 
       <div class="community-panel" data-panel="calls">
         <div class="glass-card call-room-panel">
-          <div class="call-controls">
-            <label>المقرر<select id="jitsiCourseSelect"><option value="">اختر مقررًا</option></select></label>
-            <button class="btn btn-primary" id="startJitsiCall" type="button">الانضمام إلى مكالمة المقرر</button>
-            <button class="btn btn-secondary" id="leaveJitsiCall" type="button" hidden>مغادرة المكالمة</button>
+          <div class="live-call-sections">
+            <section class="live-call-section">
+              <h2>المكالمات الجماعية</h2>
+              <div id="groupLiveCalls" class="live-call-list" aria-live="polite"></div>
+            </section>
+            <section class="live-call-section">
+              <h2>المكالمات الخاصة</h2>
+              <div id="privateLiveCalls" class="live-call-list" aria-live="polite"></div>
+            </section>
           </div>
-          <div id="jitsiCallHost" class="jitsi-call-host" hidden></div>
+          <div id="communityLiveCallHost" class="jitsi-call-host" hidden></div>
+          <button class="btn btn-secondary" id="leaveCommunityLiveCall" type="button" hidden>مغادرة المكالمة</button>
         </div>
       </div>
     </main>

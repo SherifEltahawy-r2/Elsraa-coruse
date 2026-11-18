@@ -36,6 +36,20 @@ const textMap = {
   'حفظ كلمة المرور': 'Save password',
   'تأكيد البريد الإلكتروني مطلوب': 'Email confirmation required',
   'لوحة الإدارة': 'Admin dashboard',
+  'إدارة المكالمات المباشرة': 'Live Calls Management',
+  'اسم المكالمة بالعربية': 'Call name (Arabic)',
+  'اسم المكالمة بالإنجليزية': 'Call name (English)',
+  'نوع المكالمة': 'Call type',
+  'مكالمة نشطة': 'Active call',
+  'حفظ المكالمة': 'Save call',
+  'المكالمات الجماعية': 'Group calls',
+  'المكالمات الخاصة': 'Private calls',
+  'انضم إلى المكالمة الجماعية': 'Join group call',
+  'انضم إلى المكالمة الخاصة': 'Join private call',
+  'انضمام مباشر': 'Join directly',
+  'لا توجد مكالمات جماعية نشطة.': 'No active group calls.',
+  'لا توجد مكالمات خاصة نشطة.': 'No active private calls.',
+  'لا توجد مكالمات مباشرة.': 'No live calls yet.',
   'لوحة التحكم الرئيسية': 'Administration',
   'المواعيد': 'Schedule',
   'التقييمات': 'Reviews',
@@ -818,6 +832,7 @@ function toggleLanguage() {
   loadDashboard().catch(reportError);
   loadCommunityMessages().catch(reportError);
   populateCommunityCourses().catch(reportError);
+  loadCommunityLiveCalls().catch(reportError);
   renderCommunityPresence();
   for (const roomKey of typingMembers.keys()) renderTypingStatus(roomKey);
   if (isAdmin()) {
@@ -1748,6 +1763,7 @@ async function loadAdmin() {
   ]);
   populateCourseSelects();
   bindAdminForms();
+  renderAdminLiveCalls().catch(reportError);
 }
 
 async function saveSiteSettings(event) {
@@ -1991,6 +2007,104 @@ async function renderAdminSchedules() {
   }));
 }
 
+async function renderAdminLiveCalls() {
+  const target = document.getElementById('adminLiveCalls');
+  if (!target || !isAdmin()) return;
+  const { data, error } = await appState.client.from('live_calls')
+    .select('id,title_ar,title_en,call_type,room_slug,is_active,created_at')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+
+  if (!data.length) {
+    target.textContent = t('لا توجد مكالمات مباشرة.', 'No live calls yet.');
+    return;
+  }
+  target.replaceChildren(...data.map((call) => {
+    const row = document.createElement('article');
+    row.className = 'live-call-item live-call-admin-row';
+    const detail = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = getLocalized(call, 'title');
+    const metadata = document.createElement('small');
+    metadata.textContent = `${call.call_type === 'group' ? t('مكالمة جماعية', 'Group call') : t('مكالمة خاصة', 'Private call')} · ${call.is_active ? t('نشطة', 'Active') : t('غير نشطة', 'Inactive')}`;
+    detail.append(title, metadata);
+
+    const actions = document.createElement('div');
+    actions.className = 'live-call-actions';
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'btn btn-secondary';
+    edit.textContent = t('تعديل', 'Edit');
+    edit.addEventListener('click', () => {
+      const form = document.getElementById('liveCallForm');
+      form.elements.namedItem('live_call_id').value = call.id;
+      form.elements.namedItem('title_ar').value = call.title_ar;
+      form.elements.namedItem('title_en').value = call.title_en;
+      form.elements.namedItem('call_type').value = call.call_type;
+      form.elements.namedItem('is_active').checked = call.is_active;
+      form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+
+    const join = document.createElement('button');
+    join.type = 'button';
+    join.className = 'btn btn-primary';
+    join.textContent = t('انضمام مباشر', 'Join directly');
+    join.addEventListener('click', () => {
+      joinLiveCall(call, 'adminLiveCallHost', 'leaveAdminLiveCall').catch(reportError);
+    });
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'btn btn-secondary';
+    remove.textContent = t('حذف', 'Delete');
+    remove.addEventListener('click', async () => {
+      if (!confirm(t('حذف هذه المكالمة؟', 'Delete this call?'))) return;
+      const result = await appState.client.from('live_calls').delete().eq('id', call.id);
+      if (result.error) return reportError(result.error);
+      await renderAdminLiveCalls();
+    });
+    actions.append(edit, join, remove);
+    row.append(detail, actions);
+    return row;
+  }));
+}
+
+function generateLiveCallRoomSlug() {
+  if (!window.crypto?.getRandomValues) {
+    throw new Error(t('تعذر إنشاء معرّف آمن للمكالمة.', 'Could not generate a secure room ID.'));
+  }
+  const bytes = new Uint8Array(24);
+  window.crypto.getRandomValues(bytes);
+  const token = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `AlIsraaLive_${token}`;
+}
+
+async function saveLiveCall(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = new FormData(form);
+  const liveCallId = String(values.get('live_call_id') || '');
+  const call = {
+    title_ar: String(values.get('title_ar') || '').trim(),
+    title_en: String(values.get('title_en') || '').trim(),
+    call_type: String(values.get('call_type')),
+    is_active: form.elements.namedItem('is_active').checked,
+  };
+  const result = liveCallId
+    ? await appState.client.from('live_calls').update(call).eq('id', liveCallId)
+    : await appState.client.from('live_calls').insert({
+      ...call,
+      room_slug: generateLiveCallRoomSlug(),
+      created_by: appState.user.id,
+    });
+  if (result.error) return reportError(result.error);
+  showToast(t('تم حفظ المكالمة المباشرة.', 'Live call saved.'));
+  form.reset();
+  form.elements.namedItem('live_call_id').value = '';
+  form.elements.namedItem('is_active').checked = true;
+  await renderAdminLiveCalls();
+}
+
 function toLocalDateTime(value) {
   const date = new Date(value);
   date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
@@ -2012,6 +2126,13 @@ function bindAdminForms() {
   if (announcementForm && !announcementForm.dataset.bound) {
     announcementForm.dataset.bound = 'true';
     announcementForm.addEventListener('submit', publishAnnouncement);
+  }
+  const liveCallForm = document.getElementById('liveCallForm');
+  if (liveCallForm && !liveCallForm.dataset.bound) {
+    liveCallForm.dataset.bound = 'true';
+    liveCallForm.addEventListener('submit', (event) => {
+      saveLiveCall(event).catch(reportError);
+    });
   }
   const roleForm = document.getElementById('adminRoleForm');
   if (roleForm && !roleForm.dataset.bound) {
@@ -2246,7 +2367,7 @@ function restrictCommunityChat() {
   document.querySelectorAll('#publicChatMessages, #privateChatMessages').forEach((list) => {
     list.textContent = t('سجّل الدخول لعرض المحادثات وإرسال الرسائل.', 'Sign in to view conversations and send messages.');
   });
-  document.querySelectorAll('#privateCourseSelect, #jitsiCourseSelect, #startJitsiCall')
+  document.querySelectorAll('#privateCourseSelect')
     .forEach((control) => { control.disabled = true; });
 }
 
@@ -2258,12 +2379,8 @@ let lastTypingBroadcast = 0;
 let typingIdleTimeout = null;
 
 async function populateCommunityCourses() {
-  const selects = [
-    document.getElementById('privateCourseSelect'),
-    document.getElementById('jitsiCourseSelect'),
-  ].filter(Boolean);
-  if (!selects.length || !appState.client || !appState.user || activeJitsiCall) return;
-  const previousValues = new Map(selects.map((select) => [select.id, select.value]));
+  const select = document.getElementById('privateCourseSelect');
+  if (!select || !appState.client || !appState.user) return;
 
   let data;
   let error;
@@ -2283,27 +2400,24 @@ async function populateCommunityCourses() {
     return { id: isAdmin() ? row.id : row.course_id, course };
   }).filter(Boolean);
 
-  selects.forEach((select) => {
-    select.replaceChildren(new Option(t('اختر مقررًا', 'Select a course'), ''));
-    courses.forEach(({ id, course }) => {
-      select.add(new Option(getLocalized(course, 'title'), id));
-    });
-    const previousValue = previousValues.get(select.id);
-    select.value = courses.some(({ id }) => id === previousValue)
-      ? previousValue
-      : courses[0]?.id || '';
-    if (appState.user) select.disabled = false;
+  const previousValue = select.value;
+  select.replaceChildren(new Option(t('اختر مقررًا', 'Select a course'), ''));
+  courses.forEach(({ id, course }) => {
+    select.add(new Option(getLocalized(course, 'title'), id));
   });
+  select.value = courses.some(({ id }) => id === previousValue)
+    ? previousValue
+    : courses[0]?.id || '';
+  select.disabled = false;
 }
 
 function bindCallControls() {
-  document.getElementById('startJitsiCall')?.addEventListener('click', () => {
-    startJitsiCall().catch(reportError);
-  });
-  document.getElementById('leaveJitsiCall')?.addEventListener('click', () => closeJitsiCall());
+  document.getElementById('leaveCommunityLiveCall')?.addEventListener('click', () => closeLiveCall());
+  document.getElementById('leaveAdminLiveCall')?.addEventListener('click', () => closeLiveCall());
 }
 
-let activeJitsiCall = null;
+let activeLiveCall = null;
+let liveCallJoinPending = false;
 let jitsiApiScriptPromise = null;
 
 function loadJitsiExternalApi() {
@@ -2311,8 +2425,9 @@ function loadJitsiExternalApi() {
   if (jitsiApiScriptPromise) return jitsiApiScriptPromise;
   jitsiApiScriptPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script');
-    script.src = 'https://meet.jit.si/external_api.js';
+    script.src = 'https://meet.ffmuc.net/external_api.js';
     script.async = true;
+    script.crossOrigin = 'anonymous';
     script.onload = resolve;
     script.onerror = () => {
       jitsiApiScriptPromise = null;
@@ -2323,89 +2438,107 @@ function loadJitsiExternalApi() {
   return jitsiApiScriptPromise;
 }
 
-async function startJitsiCall() {
-  const courseId = document.getElementById('jitsiCourseSelect')?.value;
-  const start = document.getElementById('startJitsiCall');
-  if (!appState.user) {
-    location.href = 'login.html';
+async function joinLiveCall(call, hostId, leaveButtonId) {
+  if (activeLiveCall || liveCallJoinPending) {
+    showToast(t('أنت في مكالمة بالفعل.', 'You are already in a call.'), true);
     return;
   }
-  if (activeJitsiCall) return;
-  if (!courseId) {
-    showToast(t('اختر مقررًا أولاً.', 'Select a course first.'), true);
-    return;
-  }
-  start.disabled = true;
+  const host = document.getElementById(hostId);
+  liveCallJoinPending = true;
   try {
-    if (!isAdmin()) {
-      const { data: enrollment, error } = await appState.client.from('enrollments')
-        .select('course_id').eq('profile_id', appState.user.id)
-        .eq('course_id', courseId).eq('status', 'approved').maybeSingle();
-      if (error) throw error;
-      if (!enrollment) {
-        showToast(t('المكالمات متاحة للمشتركين المعتمدين في المقرر فقط.', 'Calls are available only to approved course subscribers.'), true);
-        return;
-      }
-    }
-
-    const { data: profile, error: profileError } = await appState.client.from('profiles')
-      .select('full_name,email').eq('id', appState.user.id).single();
-    if (profileError) throw profileError;
-    if (!profile?.full_name || !profile?.email) {
-      throw new Error(t('بيانات الاسم والبريد غير متاحة في الملف الشخصي.', 'Registered name and email are missing from the profile.'));
-    }
-
     await loadJitsiExternalApi();
-    const host = document.getElementById('jitsiCallHost');
+    const leaveButton = document.getElementById(leaveButtonId);
     const container = document.createElement('div');
-    container.id = 'jitsiMeetingContainer';
     container.className = 'jitsi-meeting-container';
     host.replaceChildren(container);
     host.hidden = false;
-    const api = new window.JitsiMeetExternalAPI('meet.jit.si', {
-      roomName: `AlIsraaLaw_Course_${courseId}_SecureRoom`,
+
+    const displayName = appState.profile?.full_name
+      || appState.user?.user_metadata?.full_name
+      || t('زائر / Guest', 'Guest');
+    const api = new window.JitsiMeetExternalAPI('meet.ffmuc.net', {
+      roomName: call.room_slug,
       parentNode: container,
       width: '100%',
       height: '72vh',
-      userInfo: { displayName: profile.full_name, email: profile.email },
+      userInfo: { displayName },
       configOverwrite: {
         prejoinPageEnabled: false,
+        requireDisplayName: false,
+        enableLobbyChat: false,
+        disableDeepLinking: true,
         disableInviteFunctions: true,
       },
       interfaceConfigOverwrite: { HIDE_INVITE_MORE_HEADER: true },
     });
-    activeJitsiCall = api;
-    document.getElementById('jitsiCourseSelect').disabled = true;
-    start.hidden = true;
-    document.getElementById('leaveJitsiCall').hidden = false;
-    api.addEventListener('readyToClose', () => closeJitsiCall(false));
+    activeLiveCall = { api, hostId, leaveButtonId };
+    leaveButton.hidden = false;
+    api.addEventListener('readyToClose', () => closeLiveCall(false));
   } catch (error) {
-    closeJitsiCall(false);
+    host?.replaceChildren();
+    if (host) host.hidden = true;
     throw error;
   } finally {
-    if (!activeJitsiCall) start.disabled = false;
+    liveCallJoinPending = false;
   }
 }
 
-function closeJitsiCall(disposeApi = true) {
-  const api = activeJitsiCall;
-  activeJitsiCall = null;
-  if (disposeApi && api) {
+function closeLiveCall(disposeApi = true) {
+  const activeCall = activeLiveCall;
+  activeLiveCall = null;
+  if (!activeCall) return;
+  if (disposeApi) {
     try {
-      api.dispose();
+      activeCall.api.dispose();
     } catch (error) {
       reportError(error);
     }
   }
-  document.getElementById('jitsiCallHost')?.replaceChildren();
-  const host = document.getElementById('jitsiCallHost');
+  const host = document.getElementById(activeCall.hostId);
   if (host) host.hidden = true;
-  const select = document.getElementById('jitsiCourseSelect');
-  if (select) select.disabled = false;
-  const start = document.getElementById('startJitsiCall');
-  if (start) start.hidden = false;
-  const leave = document.getElementById('leaveJitsiCall');
-  if (leave) leave.hidden = true;
+  host?.replaceChildren();
+  const leaveButton = document.getElementById(activeCall.leaveButtonId);
+  if (leaveButton) leaveButton.hidden = true;
+}
+
+async function loadCommunityLiveCalls() {
+  const groupTarget = document.getElementById('groupLiveCalls');
+  const privateTarget = document.getElementById('privateLiveCalls');
+  if (!groupTarget || !privateTarget || !appState.client) return;
+
+  const { data, error } = await appState.client.from('live_calls')
+    .select('id,title_ar,title_en,call_type,room_slug')
+    .eq('is_active', true).order('created_at', { ascending: false });
+  if (error) throw error;
+
+  const calls = data || [];
+  [
+    { type: 'group', target: groupTarget, title: t('لا توجد مكالمات جماعية نشطة.', 'No active group calls.') },
+    { type: 'private', target: privateTarget, title: t('لا توجد مكالمات خاصة نشطة.', 'No active private calls.') },
+  ].forEach(({ type, target, title }) => {
+    const items = calls.filter((call) => call.call_type === type);
+    if (!items.length) {
+      target.textContent = title;
+      return;
+    }
+    target.replaceChildren(...items.map((call) => {
+      const item = document.createElement('article');
+      item.className = 'live-call-item';
+      const name = document.createElement('strong');
+      name.textContent = getLocalized(call, 'title');
+      const join = document.createElement('button');
+      join.type = 'button';
+      join.className = type === 'group' ? 'btn btn-primary' : 'btn btn-secondary';
+      join.textContent = type === 'group'
+        ? t('انضم إلى المكالمة الجماعية', 'Join group call')
+        : t('انضم إلى المكالمة الخاصة', 'Join private call');
+      join.addEventListener('click', () => {
+        joinLiveCall(call, 'communityLiveCallHost', 'leaveCommunityLiveCall').catch(reportError);
+      });
+      item.append(name, join);
+      return item;
+    }));
+  });
 }
 
 /*
@@ -2874,6 +3007,7 @@ async function initialize() {
   }
   updateNavigation();
   await renderCourseCatalog();
+  await loadCommunityLiveCalls().catch(reportError);
   if (appState.user) {
     try {
       await loadProfile();
@@ -2912,18 +3046,13 @@ async function initialize() {
     appState.user = session?.user || null;
     if (!appState.user) {
       appState.profile = null;
-      closeJitsiCall();
-      const callCourseSelect = document.getElementById('jitsiCourseSelect');
-      const startCallButton = document.getElementById('startJitsiCall');
+      closeLiveCall();
       const privateCourseSelect = document.getElementById('privateCourseSelect');
-      if (callCourseSelect) callCourseSelect.disabled = true;
-      if (startCallButton) startCallButton.disabled = true;
       if (privateCourseSelect) privateCourseSelect.disabled = true;
-      [callCourseSelect, privateCourseSelect].forEach((select) => {
-        select?.replaceChildren(new Option(t('اختر مقررًا', 'Select a course'), ''));
-      });
+      privateCourseSelect?.replaceChildren(new Option(t('اختر مقررًا', 'Select a course'), ''));
     }
     updateNavigation();
+    loadCommunityLiveCalls().catch(reportError);
   });
 }
 

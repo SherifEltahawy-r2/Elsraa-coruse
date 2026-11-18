@@ -1452,6 +1452,64 @@ textarea {
   gap: 18px;
 }
 
+.live-call-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 16px;
+}
+
+.live-call-section,
+.live-call-admin-list {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.live-call-section h2 {
+  margin: 0;
+  color: var(--gold-soft);
+  font-size: 1.15rem;
+}
+
+.live-call-list {
+  display: grid;
+  gap: 10px;
+}
+
+.live-call-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.live-call-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid rgba(212, 175, 55, 0.32);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(16, 32, 58, 0.96), rgba(3, 11, 26, 0.96));
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.08), 0 10px 24px rgba(0, 0, 0, 0.2);
+}
+
+.live-call-item strong {
+  display: block;
+  color: var(--gold-soft);
+}
+
+.live-call-item small {
+  display: block;
+  margin-top: 3px;
+  opacity: 0.78;
+}
+
+.live-call-item .btn {
+  flex: 0 0 auto;
+}
+
 .jitsi-call-host {
   overflow: hidden;
   min-height: 320px;
