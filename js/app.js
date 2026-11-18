@@ -817,7 +817,7 @@ function toggleLanguage() {
   loadCourseDetails().catch(reportError);
   loadDashboard().catch(reportError);
   loadCommunityMessages().catch(reportError);
-  populateCallCourses().catch(reportError);
+  populateCommunityCourses().catch(reportError);
   renderCommunityPresence();
   for (const roomKey of typingMembers.keys()) renderTypingStatus(roomKey);
   if (isAdmin()) {
@@ -2246,7 +2246,7 @@ function restrictCommunityChat() {
   document.querySelectorAll('#publicChatMessages, #privateChatMessages').forEach((list) => {
     list.textContent = t('سجّل الدخول لعرض المحادثات وإرسال الرسائل.', 'Sign in to view conversations and send messages.');
   });
-  document.querySelectorAll('#jitsiCourseSelect, #startJitsiCall')
+  document.querySelectorAll('#privateCourseSelect, #jitsiCourseSelect, #startJitsiCall')
     .forEach((control) => { control.disabled = true; });
 }
 
@@ -2257,29 +2257,43 @@ const typingTimeouts = new Map();
 let lastTypingBroadcast = 0;
 let typingIdleTimeout = null;
 
-async function populateCallCourses() {
-  const select = document.getElementById('jitsiCourseSelect');
-  if (!select || !appState.client || !appState.user || activeJitsiCall) return;
-  const selectedCourse = select.value;
+async function populateCommunityCourses() {
+  const selects = [
+    document.getElementById('privateCourseSelect'),
+    document.getElementById('jitsiCourseSelect'),
+  ].filter(Boolean);
+  if (!selects.length || !appState.client || !appState.user || activeJitsiCall) return;
+  const previousValues = new Map(selects.map((select) => [select.id, select.value]));
+
   let data;
   let error;
   if (isAdmin()) {
     ({ data, error } = await appState.client.from('courses')
-      .select('id,title_ar,title_en').order('title_ar'));
+      .select('id, title_ar, title_en').order('created_at', { ascending: false }));
   } else {
     ({ data, error } = await appState.client.from('enrollments')
-      .select('course_id,course:courses(title_ar,title_en)')
+      .select('course_id, courses(id, title_ar, title_en)')
       .eq('profile_id', appState.user.id).eq('status', 'approved'));
   }
   if (error) throw error;
-  select.replaceChildren(new Option(t('اختر مقررًا', 'Select a course'), ''));
-  (data || []).forEach((row) => {
-    const course = isAdmin() ? row : row.course;
-    if (course) select.add(new Option(getLocalized(course, 'title'), isAdmin() ? row.id : row.course_id));
+
+  const courses = (data || []).map((row) => {
+    const course = isAdmin() ? row : (Array.isArray(row.courses) ? row.courses[0] : row.courses);
+    if (!course) return null;
+    return { id: isAdmin() ? row.id : row.course_id, course };
+  }).filter(Boolean);
+
+  selects.forEach((select) => {
+    select.replaceChildren(new Option(t('اختر مقررًا', 'Select a course'), ''));
+    courses.forEach(({ id, course }) => {
+      select.add(new Option(getLocalized(course, 'title'), id));
+    });
+    const previousValue = previousValues.get(select.id);
+    select.value = courses.some(({ id }) => id === previousValue)
+      ? previousValue
+      : courses[0]?.id || '';
+    if (appState.user) select.disabled = false;
   });
-  if ([...select.options].some((option) => option.value === selectedCourse)) {
-    select.value = selectedCourse;
-  }
 }
 
 function bindCallControls() {
@@ -2695,19 +2709,6 @@ function bindCommunityChat() {
   });
 }
 
-async function populateCommunityCourses() {
-  const select = document.getElementById('privateCourseSelect');
-  if (!select || !appState.user) return;
-  const { data, error } = await appState.client.from('enrollments')
-    .select('course_id,course:courses(title_ar,title_en)')
-    .eq('profile_id', appState.user.id).eq('status', 'approved');
-  if (error) return reportError(error);
-  select.replaceChildren(new Option(t('اختر مقررًا', 'Select a course'), ''));
-  data.forEach((enrollment) => {
-    select.add(new Option(getLocalized(enrollment.course, 'title'), enrollment.course_id));
-  });
-}
-
 async function renderAdminReviews() {
   const target = document.getElementById('adminReviews');
   if (!target || !isAdmin()) return;
@@ -2882,6 +2883,7 @@ async function initialize() {
         showToast(t('تم حظر هذا الحساب.', 'This account has been banned.'), true);
         return;
       }
+      await populateCommunityCourses();
       updateNavigation();
       await guardPage();
       await loadCommunityMembers().catch(reportError);
@@ -2891,9 +2893,7 @@ async function initialize() {
       await renderCourseCatalog();
       await loadDashboard();
       await loadAdmin();
-      await populateCommunityCourses();
       await loadCommunityMessages();
-      await populateCallCourses();
       if (document.getElementById('publicTyping')) {
         await loadTypingStatus('public').catch(reportError);
         const selectedCourse = document.getElementById('privateCourseSelect')?.value;
@@ -2915,11 +2915,13 @@ async function initialize() {
       closeJitsiCall();
       const callCourseSelect = document.getElementById('jitsiCourseSelect');
       const startCallButton = document.getElementById('startJitsiCall');
+      const privateCourseSelect = document.getElementById('privateCourseSelect');
       if (callCourseSelect) callCourseSelect.disabled = true;
       if (startCallButton) startCallButton.disabled = true;
-      document.getElementById('jitsiCourseSelect')?.replaceChildren(
-        new Option(t('اختر مقررًا', 'Select a course'), ''),
-      );
+      if (privateCourseSelect) privateCourseSelect.disabled = true;
+      [callCourseSelect, privateCourseSelect].forEach((select) => {
+        select?.replaceChildren(new Option(t('اختر مقررًا', 'Select a course'), ''));
+      });
     }
     updateNavigation();
   });
