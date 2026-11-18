@@ -72,6 +72,7 @@ using (
 );
 
 drop policy if exists "Admins manage call rooms" on public.call_rooms;
+drop policy if exists "Admins and owners manage call rooms" on public.call_rooms;
 create policy "Admins and owners manage call rooms"
 on public.call_rooms for all to authenticated
 using ((select public.is_admin()) or created_by = (select auth.uid()))
@@ -112,6 +113,7 @@ on public.course_reviews for delete to authenticated
 using (profile_id = (select auth.uid()) or (select public.is_admin()));
 
 drop policy if exists "Users and admins manage community messages" on public.community_messages;
+drop policy if exists "Users and admins delete community messages" on public.community_messages;
 create policy "Users and admins delete community messages"
 on public.community_messages for delete to authenticated
 using (profile_id = (select auth.uid()) or (select public.is_admin()));
