@@ -1407,6 +1407,16 @@ textarea {
   gap: 12px;
 }
 
+.remote-call-videos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.remote-call-videos video {
+  min-width: 0;
+}
+
 .call-videos video,
 .lesson-video-frame video {
   width: 100%;

@@ -27,10 +27,14 @@ create table if not exists public.call_rooms (
 create table if not exists public.call_participants (
   room_id uuid not null references public.call_rooms(id) on delete cascade,
   profile_id uuid not null references public.profiles(id) on delete cascade,
+  profile_name text not null default '',
   joined_at timestamptz not null default now(),
   left_at timestamptz,
   primary key (room_id, profile_id)
 );
+
+alter table public.call_participants
+  add column if not exists profile_name text not null default '';
 
 create table if not exists public.call_signals (
   id uuid primary key default gen_random_uuid(),
@@ -62,7 +66,8 @@ create policy "Call room participants read rooms"
 on public.call_rooms for select to authenticated
 using (
   (select public.is_admin())
-  or (course_id is null)
+  or (room_type = 'group' and course_id is null)
+  or created_by = (select auth.uid())
   or (select public.is_enrolled_in_course(course_id))
 );
 
@@ -80,7 +85,12 @@ using (
   or (select public.is_admin())
   or exists (
     select 1 from public.call_rooms r
-    where r.id = room_id and r.created_by = (select auth.uid())
+    where r.id = room_id
+      and (
+        r.course_id is null
+        or r.created_by = (select auth.uid())
+        or (select public.is_enrolled_in_course(r.course_id))
+      )
   )
 );
 

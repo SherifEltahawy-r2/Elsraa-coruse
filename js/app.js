@@ -143,6 +143,38 @@ const textMap = {
   'آراء الطلاب': 'Student feedback',
   'تقييمات': 'Reviews',
   'الدردشة العامة والصفوف الخاصة': 'Public chat and course discussions',
+  'المكالمات الجماعية والخاصة': 'Group and private calls',
+  'غرفة المكالمة': 'Call room',
+  'اختر غرفة': 'Select a room',
+  'نوع الغرفة': 'Room type',
+  'مكالمة جماعية': 'Group call',
+  'مكالمة خاصة': 'Private call',
+  'إنشاء غرفة مكالمة': 'Create call room',
+  'مكالمة صوتية': 'Audio call',
+  'مكالمة فيديو': 'Video call',
+  'كتم الميكروفون': 'Mute microphone',
+  'تشغيل الميكروفون': 'Unmute microphone',
+  'إيقاف الكاميرا': 'Turn camera off',
+  'تشغيل الكاميرا': 'Turn camera on',
+  'مغادرة المكالمة': 'Leave call',
+  'متواجد': 'Present',
+  'أنت': 'You',
+  'مشارك': 'Participant',
+  'اسم غرفة المكالمة': 'Call room name',
+  'اجتماع قانوني': 'Law meeting',
+  'تم طردك مؤقتًا من المكالمات.': 'You were temporarily removed from calls.',
+  'المتصفح لا يدعم المكالمات الصوتية والفيديو.': 'This browser does not support audio and video calls.',
+  'كتم 30 د': 'Mute 30 min',
+  'طرد 30 د': 'Kick 30 min',
+  'إلغاء الحظر': 'Unban',
+  'حظر': 'Ban',
+  'حذف الحساب': 'Delete account',
+  'إرسال استعادة كلمة المرور': 'Send password recovery',
+  'تم إرسال رابط استعادة كلمة المرور إلى بريد المستخدم.': 'A password recovery link was sent to the user.',
+  'تم تنفيذ إجراء الحماية.': 'The safety action was applied.',
+  'تم حذف الحساب.': 'The account was deleted.',
+  'تم حظر هذا الحساب.': 'This account has been banned.',
+  'تم كتم حسابك مؤقتًا.': 'Your account is temporarily muted.',
   'المنتدى العام': 'Public forum',
   'الدردشة الخاصة للمقرر': 'Private course discussion',
   'أكتب سؤالك هنا...': 'Write your question here...',
@@ -771,6 +803,11 @@ function toggleLanguage() {
   renderCourseCatalog().catch(reportError);
   loadCourseDetails().catch(reportError);
   loadDashboard().catch(reportError);
+  loadCommunityMessages().catch(reportError);
+  loadCallRooms().catch(reportError);
+  if (isAdmin()) {
+    renderStudentDirectory().catch(reportError);
+  }
 }
 
 async function loadAnnouncements() {
@@ -1541,10 +1578,10 @@ async function renderStudentDirectory() {
     const actions = document.createElement('div');
     actions.className = 'moderation-actions';
     const actionsConfig = [
-      ['mute', 'كتم 30 د'],
-      ['kick', 'طرد 30 د'],
-      ['ban', profile.account_status === 'banned' ? 'إلغاء الحظر' : 'حظر'],
-      ['delete', 'حذف الحساب'],
+      ['mute', t('كتم 30 د', 'Mute 30 min')],
+      ['kick', t('طرد 30 د', 'Kick 30 min')],
+      ['ban', profile.account_status === 'banned' ? t('إلغاء الحظر', 'Unban') : t('حظر', 'Ban')],
+      ['delete', t('حذف الحساب', 'Delete account')],
     ];
     actionsConfig.forEach(([action, label]) => {
       const button = document.createElement('button');
@@ -1557,7 +1594,7 @@ async function renderStudentDirectory() {
     const reset = document.createElement('button');
     reset.type = 'button';
     reset.className = 'btn btn-secondary';
-    reset.textContent = 'إرسال استعادة كلمة المرور';
+    reset.textContent = t('إرسال استعادة كلمة المرور', 'Send password recovery');
     reset.addEventListener('click', () => sendPasswordRecovery(profile.email));
     actions.appendChild(reset);
     row.append(info, actions);
@@ -1567,10 +1604,10 @@ async function renderStudentDirectory() {
 
 async function moderateProfile(profile, action) {
   if (profile.id === appState.user.id) {
-    showToast('لا يمكنك تعديل حسابك الإداري الحالي.', true);
+    showToast(t('لا يمكنك تعديل حسابك الإداري الحالي.', 'You cannot modify your current administrator account.'), true);
     return;
   }
-  if (action === 'delete' && !confirm(`حذف حساب ${profile.email} نهائيًا؟ لا يمكن التراجع.`)) return;
+  if (action === 'delete' && !confirm(t(`حذف حساب ${profile.email} نهائيًا؟ لا يمكن التراجع.`, `Permanently delete ${profile.email}? This cannot be undone.`))) return;
   if (action === 'ban' && profile.account_status === 'banned') action = 'unban';
   const { error } = await appState.client.rpc('moderate_profile', {
     p_profile_id: profile.id,
@@ -1578,7 +1615,9 @@ async function moderateProfile(profile, action) {
     p_minutes: 30,
   });
   if (error) return reportError(error);
-  showToast(action === 'delete' ? 'تم حذف الحساب.' : 'تم تنفيذ إجراء الحماية.');
+  showToast(action === 'delete'
+    ? t('تم حذف الحساب.', 'The account was deleted.')
+    : t('تم تنفيذ إجراء الحماية.', 'The safety action was applied.'));
   await renderStudentDirectory();
 }
 
@@ -1588,7 +1627,7 @@ async function sendPasswordRecovery(email) {
     redirectTo: `${location.origin}/update-password.html`,
   });
   if (error) return reportError(error);
-  showToast('تم إرسال رابط استعادة كلمة المرور إلى بريد المستخدم.');
+  showToast(t('تم إرسال رابط استعادة كلمة المرور إلى بريد المستخدم.', 'A password recovery link was sent to the user.'));
 }
 
 async function renderAdminSchedules() {
@@ -1867,12 +1906,17 @@ function restrictCommunityChat() {
   document.querySelectorAll('#publicChatMessages, #privateChatMessages').forEach((list) => {
     list.textContent = t('سجّل الدخول لعرض المحادثات وإرسال الرسائل.', 'Sign in to view conversations and send messages.');
   });
+  document.querySelectorAll('#createCallRoom, #joinAudioCall, #joinVideoCall, #callRoomSelect, #callRoomType')
+    .forEach((control) => { control.disabled = true; });
 }
 
 let activeCallRoom = null;
-let callPeer = null;
 let callStream = null;
 let callChannel = null;
+let callParticipantsChannel = null;
+const callPeers = new Map();
+const remoteStreams = new Map();
+let callMode = 'video';
 
 async function loadCallRooms() {
   const select = document.getElementById('callRoomSelect');
@@ -1886,64 +1930,130 @@ async function loadCallRooms() {
 
 function bindCallControls() {
   const create = document.getElementById('createCallRoom');
-  const join = document.getElementById('joinCallRoom');
+  const joinAudio = document.getElementById('joinAudioCall');
+  const joinVideo = document.getElementById('joinVideoCall');
   const leave = document.getElementById('leaveCallRoom');
+  const mute = document.getElementById('toggleCallMute');
+  const camera = document.getElementById('toggleCallCamera');
   if (create) create.addEventListener('click', async () => {
     if (!appState.user) return location.href = 'login.html';
     const title = prompt(t('اسم غرفة المكالمة', 'Call room name'), t('اجتماع قانوني', 'Law meeting'));
     if (!title?.trim()) return;
+    const roomType = document.getElementById('callRoomType')?.value || 'group';
     const { data, error } = await appState.client.from('call_rooms').insert({
       title: title.trim(),
-      room_type: 'group',
+      room_type: roomType,
       created_by: appState.user.id,
     }).select().single();
     if (error) return reportError(error);
     await loadCallRooms();
     document.getElementById('callRoomSelect').value = data.id;
   });
-  if (join) join.addEventListener('click', joinCallRoom);
+  if (joinAudio) joinAudio.addEventListener('click', () => joinCallRoom('audio'));
+  if (joinVideo) joinVideo.addEventListener('click', () => joinCallRoom('video'));
   if (leave) leave.addEventListener('click', leaveCallRoom);
+  if (mute) mute.addEventListener('click', () => {
+    if (!callStream) return;
+    const track = callStream.getAudioTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    mute.textContent = track.enabled ? t('كتم الميكروفون', 'Mute microphone') : t('تشغيل الميكروفون', 'Unmute microphone');
+  });
+  if (camera) camera.addEventListener('click', () => {
+    if (!callStream) return;
+    const track = callStream.getVideoTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    camera.textContent = track.enabled ? t('إيقاف الكاميرا', 'Turn camera off') : t('تشغيل الكاميرا', 'Turn camera on');
+  });
 }
 
-async function joinCallRoom() {
+async function createCallPeer(roomId, remoteUserId) {
+  if (!remoteUserId || remoteUserId === appState.user.id) return null;
+  if (callPeers.has(remoteUserId)) return callPeers.get(remoteUserId);
+  const peer = new RTCPeerConnection({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+    ],
+  });
+  callStream?.getTracks().forEach((track) => peer.addTrack(track, callStream));
+  peer.ontrack = (event) => {
+    let stream = remoteStreams.get(remoteUserId);
+    if (!stream) {
+      stream = new MediaStream();
+      remoteStreams.set(remoteUserId, stream);
+    }
+    event.streams[0]?.getTracks().forEach((track) => {
+      if (!stream.getTracks().some((item) => item.id === track.id)) stream.addTrack(track);
+    });
+    let video = document.getElementById(`remote-video-${remoteUserId}`);
+    if (!video) {
+      video = document.createElement('video');
+      video.id = `remote-video-${remoteUserId}`;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.dataset.profileId = remoteUserId;
+      document.getElementById('remoteCallVideos')?.appendChild(video);
+    }
+    video.srcObject = stream;
+  };
+  peer.onicecandidate = async (event) => {
+    if (!event.candidate) return;
+    await appState.client.from('call_signals').insert({
+      room_id: roomId,
+      sender_id: appState.user.id,
+      receiver_id: remoteUserId,
+      signal: { type: 'candidate', candidate: event.candidate },
+    });
+  };
+  peer.onconnectionstatechange = () => {
+    if (['failed', 'closed', 'disconnected'].includes(peer.connectionState)) {
+      document.getElementById(`remote-video-${remoteUserId}`)?.remove();
+      callPeers.delete(remoteUserId);
+      remoteStreams.delete(remoteUserId);
+    }
+  };
+  peer.pendingCandidates = [];
+  callPeers.set(remoteUserId, peer);
+  return peer;
+}
+
+async function joinCallRoom(mode = 'video') {
   const roomId = document.getElementById('callRoomSelect')?.value;
   if (!roomId || !appState.user) return;
   if (appState.profile?.kicked_until && new Date(appState.profile.kicked_until) > new Date()) {
     showToast(t('تم طردك مؤقتًا من المكالمات.', 'You are temporarily removed from calls.'), true);
     return;
   }
+  callMode = mode;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    showToast(t('المتصفح لا يدعم المكالمات الصوتية والفيديو.', 'This browser does not support audio and video calls.'), true);
+    return;
+  }
   try {
-    callStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    callStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true },
+      video: mode === 'video' ? { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+    });
   } catch (error) {
     return reportError(error);
   }
   activeCallRoom = roomId;
-  document.getElementById('localCallVideo').srcObject = callStream;
-  await appState.client.from('call_participants').upsert({
+  const localVideo = document.getElementById('localCallVideo');
+  localVideo.srcObject = callStream;
+  localVideo.style.display = mode === 'video' ? '' : 'none';
+  const presence = await appState.client.from('call_participants').upsert({
     room_id: roomId,
     profile_id: appState.user.id,
+    profile_name: appState.profile?.full_name || t('مشارك', 'Participant'),
     left_at: null,
   }, { onConflict: 'room_id,profile_id' });
-  callPeer = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-  callStream.getTracks().forEach((track) => callPeer.addTrack(track, callStream));
-  callPeer.ontrack = (event) => {
-    document.getElementById('remoteCallVideo').srcObject = event.streams[0];
-  };
-  callPeer.onicecandidate = async (event) => {
-    if (!event.candidate) return;
-    await appState.client.from('call_signals').insert({
-      room_id: roomId,
-      sender_id: appState.user.id,
-      signal: { candidate: event.candidate },
-    });
-  };
-  const offer = await callPeer.createOffer();
-  await callPeer.setLocalDescription(offer);
-  await appState.client.from('call_signals').insert({
-    room_id: roomId,
-    sender_id: appState.user.id,
-    signal: { description: callPeer.localDescription },
-  });
+  if (presence.error) {
+    callStream.getTracks().forEach((track) => track.stop());
+    return reportError(presence.error);
+  }
+
   callChannel = appState.client.channel(`call-${roomId}`)
     .on('postgres_changes', {
       event: 'INSERT',
@@ -1951,26 +2061,72 @@ async function joinCallRoom() {
       table: 'call_signals',
       filter: `room_id=eq.${roomId}`,
     }, async ({ new: signal }) => {
-      if (!callPeer || signal.sender_id === appState.user.id) return;
-      if (signal.signal.description) {
-        await callPeer.setRemoteDescription(signal.signal.description);
-        if (signal.signal.description.type === 'offer') {
-          const answer = await callPeer.createAnswer();
-          await callPeer.setLocalDescription(answer);
+      if (signal.sender_id === appState.user.id) return;
+      if (signal.receiver_id && signal.receiver_id !== appState.user.id) return;
+      const remoteUserId = signal.sender_id;
+      const peer = await createCallPeer(roomId, remoteUserId);
+      if (!peer) return;
+      if (signal.signal.type === 'offer') {
+        await peer.setRemoteDescription(signal.signal.description);
+        for (const candidate of peer.pendingCandidates || []) await peer.addIceCandidate(candidate);
+        peer.pendingCandidates = [];
+        if (peer.signalingState === 'have-remote-offer') {
+          const answer = await peer.createAnswer();
+          await peer.setLocalDescription(answer);
           await appState.client.from('call_signals').insert({
             room_id: roomId,
             sender_id: appState.user.id,
-            receiver_id: signal.sender_id,
-            signal: { description: callPeer.localDescription },
+            receiver_id: remoteUserId,
+            signal: { type: 'answer', description: peer.localDescription },
           });
         }
-      } else if (signal.signal.candidate) {
-        await callPeer.addIceCandidate(signal.signal.candidate);
+      } else if (signal.signal.type === 'answer') {
+        if (peer.signalingState === 'have-local-offer') {
+          await peer.setRemoteDescription(signal.signal.description);
+          for (const candidate of peer.pendingCandidates || []) await peer.addIceCandidate(candidate);
+          peer.pendingCandidates = [];
+        }
+      } else if (signal.signal.type === 'candidate') {
+        if (peer.remoteDescription) {
+          await peer.addIceCandidate(signal.signal.candidate);
+        } else {
+          peer.pendingCandidates.push(signal.signal.candidate);
+        }
       }
     })
     .subscribe();
-  document.getElementById('joinCallRoom').hidden = true;
+
+  callParticipantsChannel = appState.client.channel(`call-participants-${roomId}`)
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'call_participants',
+      filter: `room_id=eq.${roomId}`,
+    }, () => renderCallParticipants(roomId))
+    .subscribe();
+
+  document.getElementById('joinAudioCall').hidden = true;
+  document.getElementById('joinVideoCall').hidden = true;
   document.getElementById('leaveCallRoom').hidden = false;
+  document.getElementById('toggleCallMute').hidden = false;
+  document.getElementById('toggleCallCamera').hidden = mode !== 'video';
+
+  const { data: participants } = await appState.client.from('call_participants')
+    .select('profile_id')
+    .eq('room_id', roomId).is('left_at', null);
+  for (const participant of participants || []) {
+    if (participant.profile_id === appState.user.id) continue;
+    const peer = await createCallPeer(roomId, participant.profile_id);
+    if (!peer) continue;
+    const offer = await peer.createOffer();
+    await peer.setLocalDescription(offer);
+    await appState.client.from('call_signals').insert({
+      room_id: roomId,
+      sender_id: appState.user.id,
+      receiver_id: participant.profile_id,
+      signal: { type: 'offer', description: peer.localDescription },
+    });
+  }
   await renderCallParticipants(roomId);
 }
 
@@ -1980,15 +2136,20 @@ async function leaveCallRoom() {
       .eq('room_id', activeCallRoom).eq('profile_id', appState.user.id);
   }
   callStream?.getTracks().forEach((track) => track.stop());
-  callPeer?.close();
+  callPeers.forEach((peer) => peer.close());
+  callPeers.clear();
+  remoteStreams.clear();
   if (callChannel) appState.client.removeChannel(callChannel);
+  if (callParticipantsChannel) appState.client.removeChannel(callParticipantsChannel);
   activeCallRoom = null;
-  callPeer = null;
   callStream = null;
-  document.getElementById('joinCallRoom').hidden = false;
+  document.getElementById('joinAudioCall').hidden = false;
+  document.getElementById('joinVideoCall').hidden = false;
   document.getElementById('leaveCallRoom').hidden = true;
+  document.getElementById('toggleCallMute').hidden = true;
+  document.getElementById('toggleCallCamera').hidden = true;
   document.getElementById('localCallVideo').srcObject = null;
-  document.getElementById('remoteCallVideo').srcObject = null;
+  document.getElementById('remoteCallVideos').replaceChildren();
   document.getElementById('callParticipants').replaceChildren();
 }
 
@@ -1996,13 +2157,13 @@ async function renderCallParticipants(roomId) {
   const target = document.getElementById('callParticipants');
   if (!target) return;
   const { data, error } = await appState.client.from('call_participants')
-    .select('profile_id,joined_at,left_at,profile:profiles(full_name,role)')
+    .select('profile_id,profile_name,joined_at,left_at')
     .eq('room_id', roomId).is('left_at', null);
   if (error) return reportError(error);
   target.replaceChildren(...(data || []).map((participant) => {
     const item = document.createElement('span');
     item.className = 'call-participant';
-    item.textContent = `${participant.profile?.full_name || ''} · ${participant.profile?.role === 'admin' ? t('مسؤول', 'Administrator') : t('طالب', 'Student')}`;
+    item.textContent = `${participant.profile_name || t('مشارك', 'Participant')} · ${participant.profile_id === appState.user.id ? t('أنت', 'You') : t('متواجد', 'Present')}`;
     return item;
   }));
 }

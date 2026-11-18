@@ -76,13 +76,22 @@
         <div class="glass-card call-room-panel">
           <div class="call-controls">
             <label>غرفة المكالمة<select id="callRoomSelect"><option value="">اختر غرفة</option></select></label>
+            <label>نوع الغرفة
+              <select id="callRoomType">
+                <option value="group">مكالمة جماعية</option>
+                <option value="private">مكالمة خاصة</option>
+              </select>
+            </label>
             <button class="btn btn-secondary" id="createCallRoom" type="button">إنشاء غرفة مكالمة</button>
-            <button class="btn btn-primary" id="joinCallRoom" type="button">دخول المكالمة</button>
+            <button class="btn btn-primary" id="joinAudioCall" type="button">مكالمة صوتية</button>
+            <button class="btn btn-primary" id="joinVideoCall" type="button">مكالمة فيديو</button>
+            <button class="btn btn-secondary" id="toggleCallMute" type="button" hidden>كتم الميكروفون</button>
+            <button class="btn btn-secondary" id="toggleCallCamera" type="button" hidden>إيقاف الكاميرا</button>
             <button class="btn btn-secondary" id="leaveCallRoom" type="button" hidden>مغادرة المكالمة</button>
           </div>
           <div class="call-videos">
             <video id="localCallVideo" autoplay muted playsinline></video>
-            <video id="remoteCallVideo" autoplay playsinline></video>
+            <div id="remoteCallVideos" class="remote-call-videos"></div>
           </div>
           <div id="callParticipants" class="call-participants"></div>
         </div>
