@@ -21,7 +21,11 @@ editable website copyright and R2J WEB DEV developer-credit fields.
 
 Then run `supabase-safety-migration.sql` to enable account moderation, account
 status, temporary mute/kick controls, extra course videos, message deletion,
-and call-room tables. The SQL migration uses administrator-only RPC functions.
+call-room tables, profile avatars, safe community-member names, Realtime
+presence, and access-controlled chat typing status. Re-run this migration after
+deploying updates to it. Profile pictures are optional, publicly visible to
+community members, and limited to 2 MB.
+The SQL migration uses administrator-only RPC functions.
 Password recovery is always sent through Supabase email; passwords are never
 read or displayed by this website.
 

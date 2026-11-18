@@ -1,4 +1,4 @@
-const CACHE_NAME = 'al-israa-v10';
+const CACHE_NAME = 'al-israa-v11';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -36,7 +36,7 @@
         <aside class="dashboard-side glass-card">
           <h1>لوحة الطالب</h1>
           <div class="student-profile">
-            <div class="avatar-circle">إ</div>
+            <div class="avatar-circle"><img id="studentAvatar" alt="" hidden /><span id="studentAvatarFallback">إ</span></div>
             <div><strong id="studentName"></strong><small id="studentFaculty"></small></div>
           </div>
           <nav class="side-menu" aria-label="Student dashboard">
@@ -78,6 +78,14 @@
             <section class="content-panel glass-card">
               <h2>تعديل الملف الشخصي</h2>
               <form id="profileForm" class="admin-form">
+                <div class="profile-avatar-editor">
+                  <img id="profileAvatarPreview" alt="معاينة الصورة الشخصية" hidden />
+                  <span id="profileAvatarFallback">إ</span>
+                </div>
+                <label>الصورة الشخصية (اختياري، حتى 2 ميغابايت)
+                  <input name="avatar_file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" />
+                </label>
+                <button class="btn btn-secondary" id="removeProfileAvatar" type="button">إزالة الصورة</button>
                 <label>الاسم الكامل<input name="full_name" required maxlength="100" /></label>
                 <label>الكلية والجامعة<input name="faculty" required maxlength="120" /></label>
                 <label>الفرقة الدراسية

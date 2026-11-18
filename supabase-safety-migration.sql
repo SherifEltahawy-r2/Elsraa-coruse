@@ -2,7 +2,8 @@ alter table public.profiles
   add column if not exists account_status text not null default 'active'
   check (account_status in ('active', 'banned')),
   add column if not exists muted_until timestamptz,
-  add column if not exists kicked_until timestamptz;
+  add column if not exists kicked_until timestamptz,
+  add column if not exists avatar_path text;
 
 create table if not exists public.course_videos (
   id uuid primary key default gen_random_uuid(),
@@ -28,13 +29,15 @@ create table if not exists public.call_participants (
   room_id uuid not null references public.call_rooms(id) on delete cascade,
   profile_id uuid not null references public.profiles(id) on delete cascade,
   profile_name text not null default '',
+  avatar_path text,
   joined_at timestamptz not null default now(),
   left_at timestamptz,
   primary key (room_id, profile_id)
 );
 
 alter table public.call_participants
-  add column if not exists profile_name text not null default '';
+  add column if not exists profile_name text not null default '',
+  add column if not exists avatar_path text;
 
 create table if not exists public.call_signals (
   id uuid primary key default gen_random_uuid(),
@@ -45,10 +48,132 @@ create table if not exists public.call_signals (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.community_typing (
+  profile_id uuid not null references public.profiles(id) on delete cascade,
+  room_key text not null check (
+    room_key = 'public'
+    or room_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ),
+  is_typing boolean not null default true,
+  updated_at timestamptz not null default now(),
+  primary key (profile_id, room_key)
+);
+
+create index if not exists community_typing_room_updated_idx
+on public.community_typing (room_key, updated_at desc)
+where is_typing;
+
 alter table public.course_videos enable row level security;
 alter table public.call_rooms enable row level security;
 alter table public.call_participants enable row level security;
 alter table public.call_signals enable row level security;
+alter table public.community_typing enable row level security;
+
+grant select, insert, update, delete on public.course_videos to authenticated;
+grant select, insert, update, delete on public.call_rooms to authenticated;
+grant select, insert, update on public.call_participants to authenticated;
+grant select, insert, update, delete on public.call_signals to authenticated;
+grant select, insert, update on public.community_typing to authenticated;
+
+drop policy if exists "Chat members read typing status" on public.community_typing;
+create policy "Chat members read typing status"
+on public.community_typing for select to authenticated
+using (
+  (select public.is_admin())
+  or case
+    when room_key = 'public' then true
+    else (select public.is_enrolled_in_course(room_key::uuid))
+  end
+);
+
+drop policy if exists "Chat members share typing status" on public.community_typing;
+create policy "Chat members share typing status"
+on public.community_typing for insert to authenticated
+with check (
+  profile_id = (select auth.uid())
+  and (
+    (select public.is_admin())
+    or case
+      when room_key = 'public' then true
+      else (select public.is_enrolled_in_course(room_key::uuid))
+    end
+  )
+);
+
+drop policy if exists "Users update their typing status" on public.community_typing;
+create policy "Users update their typing status"
+on public.community_typing for update to authenticated
+using (profile_id = (select auth.uid()))
+with check (
+  profile_id = (select auth.uid())
+  and (
+    (select public.is_admin())
+    or case
+      when room_key = 'public' then true
+      else (select public.is_enrolled_in_course(room_key::uuid))
+    end
+  )
+);
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('profile-avatars', 'profile-avatars', true, 2097152, array['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Public profile avatars are readable" on storage.objects;
+create policy "Public profile avatars are readable"
+on storage.objects for select to anon, authenticated
+using (bucket_id = 'profile-avatars');
+
+drop policy if exists "Users upload their own profile avatar" on storage.objects;
+create policy "Users upload their own profile avatar"
+on storage.objects for insert to authenticated
+with check (
+  bucket_id = 'profile-avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+drop policy if exists "Users update their own profile avatar" on storage.objects;
+create policy "Users update their own profile avatar"
+on storage.objects for update to authenticated
+using (
+  bucket_id = 'profile-avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+)
+with check (
+  bucket_id = 'profile-avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+drop policy if exists "Users delete their own profile avatar" on storage.objects;
+create policy "Users delete their own profile avatar"
+on storage.objects for delete to authenticated
+using (
+  bucket_id = 'profile-avatars'
+  and (storage.foldername(name))[1] = (select auth.uid())::text
+);
+
+create or replace function public.get_community_members()
+returns table (id uuid, first_name text, avatar_path text, role text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p.id,
+         split_part(btrim(p.full_name), ' ', 1),
+         p.avatar_path,
+         p.role
+  from public.profiles p
+  where auth.uid() is not null
+    and p.account_status = 'active'
+  order by p.full_name;
+$$;
+
+revoke all on function public.get_community_members() from public;
+grant execute on function public.get_community_members() to authenticated;
 
 drop policy if exists "Courses expose lesson videos" on public.course_videos;
 create policy "Courses expose lesson videos"
@@ -181,6 +306,12 @@ begin
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'call_participants'
   ) then
     alter publication supabase_realtime add table public.call_participants;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'community_typing'
+  ) then
+    alter publication supabase_realtime add table public.community_typing;
   end if;
 end;
 $$;

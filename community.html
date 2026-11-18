@@ -44,6 +44,11 @@
         <h1 data-cms="community_title">الدردشة العامة والصفوف الخاصة</h1>
       </div>
 
+      <section class="glass-card community-presence" aria-labelledby="presenceHeading">
+        <h2 id="presenceHeading">حالة التواجد</h2>
+        <div id="communityPresence" class="community-presence-grid" aria-live="polite"></div>
+      </section>
+
       <div class="community-tabs">
         <button class="community-tab active" data-tab="public">المنتدى العام</button>
         <button class="community-tab" data-tab="private">الدردشة الخاصة للمقرر</button>
@@ -53,6 +58,7 @@
       <div class="community-panel active" data-panel="public">
         <div class="chat-box glass-card">
           <div class="chat-messages" id="publicChatMessages"></div>
+          <div id="publicTyping" class="typing-indicator" aria-live="polite"></div>
           <div class="chat-input-row">
             <input id="publicChatInput" type="text" placeholder="أكتب سؤالك هنا..." />
             <button class="btn btn-primary" id="sendPublicChat">إرسال</button>
@@ -64,6 +70,7 @@
         <div class="chat-box glass-card">
           <label>المقرر<select id="privateCourseSelect"><option value="">اختر مقررًا</option></select></label>
           <div class="chat-messages" id="privateChatMessages"></div>
+          <div id="privateTyping" class="typing-indicator" aria-live="polite"></div>
           <div class="chat-input-row">
             <input id="privateChatInput" type="text" placeholder="رسالة خاصة بالمقرر..." />
             <button class="btn btn-primary" id="sendPrivateChat">إرسال</button>
@@ -90,10 +97,15 @@
             <button class="btn btn-secondary" id="leaveCallRoom" type="button" hidden>مغادرة المكالمة</button>
           </div>
           <div class="call-videos">
-            <video id="localCallVideo" autoplay muted playsinline></video>
+            <div class="call-user-tile" id="localCallTile" hidden>
+              <img class="call-avatar" id="localCallAvatar" alt="" hidden />
+              <span class="call-avatar-fallback" id="localCallAvatarFallback"></span>
+              <video id="localCallVideo" autoplay muted playsinline></video>
+              <span class="call-user-name" id="localCallName"></span>
+            </div>
             <div id="remoteCallVideos" class="remote-call-videos"></div>
           </div>
-          <div id="callParticipants" class="call-participants"></div>
+          <div id="callParticipants" class="call-participants" aria-live="polite"></div>
         </div>
       </div>
     </main>

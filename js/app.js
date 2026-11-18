@@ -9,6 +9,8 @@ const appState = {
   announcementReads: new Set(),
   adminNotifications: [],
   siteSettings: {},
+  communityMembers: [],
+  onlineMembers: new Map(),
 };
 
 const textMap = {
@@ -144,6 +146,16 @@ const textMap = {
   'تقييمات': 'Reviews',
   'الدردشة العامة والصفوف الخاصة': 'Public chat and course discussions',
   'المكالمات الجماعية والخاصة': 'Group and private calls',
+  'حالة التواجد': 'Presence status',
+  'متصل الآن': 'Online now',
+  'غير متصل': 'Offline',
+  'الصورة الشخصية (اختياري، حتى 2 ميغابايت)': 'Profile picture (optional, up to 2 MB)',
+  'معاينة الصورة الشخصية': 'Profile picture preview',
+  'إزالة الصورة': 'Remove picture',
+  'يكتب الآن': 'is typing',
+  'يتحدث الآن': 'Speaking',
+  'صورة الملف الشخصي': 'Profile picture',
+  'اسم غير متاح': 'Name unavailable',
   'غرفة المكالمة': 'Call room',
   'اختر غرفة': 'Select a room',
   'نوع الغرفة': 'Room type',
@@ -408,8 +420,8 @@ function translateStaticText() {
     }
   }
 
-  document.querySelectorAll('[placeholder], [aria-label], [title]').forEach((element) => {
-    ['placeholder', 'aria-label', 'title'].forEach((attribute) => {
+  document.querySelectorAll('[placeholder], [aria-label], [title], [alt]').forEach((element) => {
+    ['placeholder', 'aria-label', 'title', 'alt'].forEach((attribute) => {
       const value = element.getAttribute(attribute);
       if (value && map[value.trim()]) {
         element.setAttribute(attribute, map[value.trim()]);
@@ -685,7 +697,7 @@ async function loadProfile() {
   if (!appState.client || !appState.user) return null;
   const { data, error } = await appState.client
     .from('profiles')
-    .select('id,email,full_name,faculty,academic_year,phone,role,account_status,muted_until,kicked_until')
+    .select('id,email,full_name,faculty,academic_year,phone,role,account_status,muted_until,kicked_until,avatar_path')
     .eq('id', appState.user.id)
     .single();
   if (error) throw error;
@@ -805,6 +817,9 @@ function toggleLanguage() {
   loadDashboard().catch(reportError);
   loadCommunityMessages().catch(reportError);
   loadCallRooms().catch(reportError);
+  renderCommunityPresence();
+  for (const roomKey of typingMembers.keys()) renderTypingStatus(roomKey);
+  if (activeCallRoom) renderCallParticipants(activeCallRoom).catch(reportError);
   if (isAdmin()) {
     renderStudentDirectory().catch(reportError);
   }
@@ -925,6 +940,190 @@ document.addEventListener('keydown', (event) => {
     });
   }
 });
+
+function renderCommunityPresence() {
+  const target = document.getElementById('communityPresence');
+  if (!target) return;
+  const onlineState = communityActivityChannel?.presenceState() || {};
+  const onlineById = new Map();
+  Object.values(onlineState).flat().forEach((presence) => {
+    if (presence.user_id) onlineById.set(presence.user_id, presence);
+  });
+  appState.onlineMembers = onlineById;
+  const members = [...appState.communityMembers].sort((a, b) => {
+    return Number(onlineById.has(b.id)) - Number(onlineById.has(a.id))
+      || a.first_name.localeCompare(b.first_name);
+  });
+  target.replaceChildren(...members.map((member) => {
+    const item = document.createElement('div');
+    item.className = `presence-member${onlineById.has(member.id) ? ' is-online' : ''}`;
+    const avatar = document.createElement('span');
+    avatar.className = 'presence-avatar';
+    const url = avatarPublicUrl(member.avatar_path);
+    if (url) {
+      const image = document.createElement('img');
+      image.src = url;
+      image.alt = '';
+      image.addEventListener('error', () => {
+        image.remove();
+        avatar.textContent = firstName(member.first_name).charAt(0).toUpperCase();
+      }, { once: true });
+      avatar.appendChild(image);
+    } else {
+      avatar.textContent = firstName(member.first_name).charAt(0).toUpperCase();
+    }
+    const details = document.createElement('span');
+    details.className = 'presence-details';
+    const name = document.createElement('strong');
+    name.textContent = firstName(member.first_name);
+    const status = document.createElement('small');
+    status.textContent = onlineById.has(member.id)
+      ? t('متصل الآن', 'Online now')
+      : t('غير متصل', 'Offline');
+    details.append(name, status);
+    item.append(avatar, details);
+    return item;
+  }));
+}
+
+function renderTypingStatus(roomKey) {
+  const isPrivate = roomKey !== 'public';
+  const selectedCourse = document.getElementById('privateCourseSelect')?.value;
+  const target = document.getElementById(isPrivate ? 'privateTyping' : 'publicTyping');
+  if (!target) return;
+  if (isPrivate && selectedCourse !== roomKey) return;
+  const names = [...(typingMembers.get(roomKey)?.values() || [])];
+  if (!names.length) {
+    target.replaceChildren();
+    target.classList.remove('is-typing');
+    return;
+  }
+  target.textContent = `${names.join('، ')} ${t('يكتب الآن', 'is typing')}…`;
+  target.classList.add('is-typing');
+}
+
+function updateRemoteTyping(payload) {
+  if (!payload?.profile_id || payload.profile_id === appState.user?.id || !payload.room_key) return;
+  const roomKey = payload.room_key;
+  let roomTyping = typingMembers.get(roomKey);
+  if (!roomTyping) {
+    roomTyping = new Map();
+    typingMembers.set(roomKey, roomTyping);
+  }
+  const member = getCommunityMember(payload.profile_id);
+  if (payload.is_typing && Date.now() - new Date(payload.updated_at).getTime() < 5000) {
+    roomTyping.set(payload.profile_id, firstName(member?.first_name));
+  } else {
+    roomTyping.delete(payload.profile_id);
+  }
+  window.clearTimeout(typingTimeouts.get(`${roomKey}:${payload.profile_id}`));
+  if (payload.is_typing) {
+    typingTimeouts.set(`${roomKey}:${payload.profile_id}`, window.setTimeout(() => {
+      roomTyping.delete(payload.profile_id);
+      renderTypingStatus(roomKey);
+    }, 3500));
+  }
+  renderTypingStatus(roomKey);
+}
+
+async function loadTypingStatus(roomKey) {
+  if (!appState.client || !appState.user) return;
+  const { data, error } = await appState.client.from('community_typing')
+    .select('profile_id,room_key,is_typing,updated_at')
+    .eq('room_key', roomKey).eq('is_typing', true)
+    .gte('updated_at', new Date(Date.now() - 5000).toISOString());
+  if (error) return reportError(error);
+  const roomTyping = new Map();
+  (data || []).filter((item) => item.profile_id !== appState.user.id).forEach((item) => {
+    const member = getCommunityMember(item.profile_id);
+    roomTyping.set(item.profile_id, firstName(member?.first_name));
+    const timerKey = `${roomKey}:${item.profile_id}`;
+    window.clearTimeout(typingTimeouts.get(timerKey));
+    const remaining = Math.max(0, 3500 - (Date.now() - new Date(item.updated_at).getTime()));
+    typingTimeouts.set(timerKey, window.setTimeout(() => {
+      roomTyping.delete(item.profile_id);
+      renderTypingStatus(roomKey);
+    }, remaining));
+  });
+  typingMembers.set(roomKey, roomTyping);
+  renderTypingStatus(roomKey);
+}
+
+async function loadCommunityMembers() {
+  if (!appState.client || !appState.user) return;
+  const { data, error } = await appState.client.rpc('get_community_members');
+  if (error) throw error;
+  appState.communityMembers = data || [];
+  renderCommunityPresence();
+}
+
+function subscribeToCommunityActivity() {
+  if (!appState.client || !appState.user) return;
+  communityActivityChannel = appState.client.channel('community-activity', {
+    config: { presence: { key: appState.user.id } },
+  })
+    .on('presence', { event: 'sync' }, renderCommunityPresence)
+    .subscribe(async (status, error) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        reportError(error || new Error(t('تعذر الاتصال بحالة التواجد.', 'Could not connect to presence status.')));
+        return;
+      }
+      if (status !== 'SUBSCRIBED') return;
+      const { error: trackError } = await communityActivityChannel.track({
+        user_id: appState.user.id,
+        first_name: firstName(appState.profile?.full_name),
+        avatar_path: appState.profile?.avatar_path || null,
+      });
+      if (trackError) reportError(trackError);
+    });
+  communityTypingChannel = appState.client.channel('community-typing-events')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table: 'community_typing',
+    }, ({ new: row }) => updateRemoteTyping(row))
+    .subscribe((status, error) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        reportError(error || new Error(t('تعذر الاتصال بمؤشر الكتابة.', 'Could not connect to typing status.')));
+      }
+    });
+}
+
+async function broadcastTyping(roomKey, isTyping) {
+  if (!appState.client || !appState.user) return;
+  const { error } = await appState.client.from('community_typing').upsert({
+    profile_id: appState.user.id,
+    room_key: roomKey,
+    is_typing: isTyping,
+    updated_at: new Date().toISOString(),
+  }, {
+    onConflict: 'profile_id,room_key',
+  });
+  if (error) console.error('Could not send chat typing status.', error);
+}
+
+function bindTypingIndicators() {
+  [
+    { id: 'publicChatInput', roomKey: 'public' },
+    { id: 'privateChatInput', roomKey: null },
+  ].forEach(({ id, roomKey: fixedRoom }) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.addEventListener('input', () => {
+      if (!appState.user) return;
+      const selectedCourse = document.getElementById('privateCourseSelect')?.value;
+      const roomKey = fixedRoom || selectedCourse;
+      if (!roomKey) return;
+      const now = Date.now();
+      if (now - lastTypingBroadcast > 900) {
+        lastTypingBroadcast = now;
+        broadcastTyping(roomKey, true);
+      }
+      window.clearTimeout(typingIdleTimeout);
+      typingIdleTimeout = window.setTimeout(() => broadcastTyping(roomKey, false), 2200);
+    });
+  });
+}
 
 function subscribeToAnnouncements() {
   if (!appState.client || !appState.user) return;
@@ -1224,12 +1423,15 @@ async function loadDashboard() {
   appState.profile = profile;
   document.getElementById('studentName')?.replaceChildren(document.createTextNode(profile.full_name));
   document.getElementById('studentFaculty')?.replaceChildren(document.createTextNode(profile.faculty || ''));
+  await renderProfileAvatar(profile);
   const profileForm = document.getElementById('profileForm');
   if (profileForm) {
     ['full_name', 'faculty', 'academic_year', 'phone'].forEach((field) => {
       const input = profileForm.elements.namedItem(field);
       if (input) input.value = profile[field] || '';
     });
+    const removeAvatar = document.getElementById('removeProfileAvatar');
+    if (removeAvatar) removeAvatar.dataset.remove = 'false';
   }
 
   const [{ data: enrollments, error: enrollmentError }, { data: schedules, error: scheduleError }] = await Promise.all([
@@ -1276,6 +1478,7 @@ async function loadDashboard() {
             videoPath: enrollment.course.video_path,
           });
         }
+
       }
       courseList.appendChild(item);
     }
@@ -1302,6 +1505,80 @@ async function loadDashboard() {
   await renderMyReviews();
 }
 
+function firstName(value) {
+  return String(value || '').trim().split(/\s+/)[0] || t('مشارك', 'Participant');
+}
+
+function avatarPublicUrl(path) {
+  if (!path || !appState.client) return '';
+  return appState.client.storage.from('profile-avatars').getPublicUrl(path).data.publicUrl;
+}
+
+async function renderProfileAvatar(profile) {
+  const url = avatarPublicUrl(profile?.avatar_path);
+  const preview = document.getElementById('profileAvatarPreview');
+  const fallback = document.getElementById('profileAvatarFallback');
+  const studentPhoto = document.getElementById('studentAvatar');
+  const studentFallback = document.getElementById('studentAvatarFallback');
+  const letter = firstName(profile?.full_name).charAt(0).toUpperCase();
+  if (preview) {
+    preview.hidden = !url;
+    preview.src = url || '';
+    preview.onerror = () => {
+      preview.hidden = true;
+      if (fallback) fallback.hidden = false;
+    };
+  }
+  if (fallback) {
+    fallback.hidden = Boolean(url);
+    fallback.textContent = letter;
+  }
+  if (studentPhoto) {
+    studentPhoto.hidden = !url;
+    studentPhoto.src = url || '';
+    studentPhoto.onerror = () => {
+      studentPhoto.hidden = true;
+      if (studentFallback) studentFallback.hidden = false;
+    };
+  }
+  if (studentFallback) {
+    studentFallback.hidden = Boolean(url);
+    studentFallback.textContent = letter;
+  }
+}
+
+function bindProfileAvatar() {
+  const form = document.getElementById('profileForm');
+  const input = form?.elements.namedItem('avatar_file');
+  const preview = document.getElementById('profileAvatarPreview');
+  const fallback = document.getElementById('profileAvatarFallback');
+  const remove = document.getElementById('removeProfileAvatar');
+  if (!input || !preview || !fallback || !remove) return;
+  input.addEventListener('change', () => {
+    const file = input.files?.[0];
+    remove.dataset.remove = 'false';
+    if (!file) return renderProfileAvatar(appState.profile);
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      input.value = '';
+      showToast(t('اختر صورة بصيغة JPG أو PNG أو WebP أو GIF وحجم لا يتجاوز 2 ميغابايت.', 'Choose a JPG, PNG, WebP, or GIF image up to 2 MB.'), true);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      preview.src = String(reader.result);
+      preview.hidden = false;
+      fallback.hidden = true;
+    };
+    reader.onerror = () => showToast(t('تعذرت قراءة الصورة.', 'Could not read the image.'), true);
+    reader.readAsDataURL(file);
+  });
+  remove.addEventListener('click', () => {
+    input.value = '';
+    remove.dataset.remove = 'true';
+    renderProfileAvatar({ full_name: appState.profile?.full_name, avatar_path: null });
+  });
+}
+
 function statusLabel(status) {
   const labels = {
     pending: t('قيد المراجعة', 'Pending'),
@@ -1313,13 +1590,57 @@ function statusLabel(status) {
 
 async function saveProfile(event) {
   event.preventDefault();
-  const values = new FormData(event.currentTarget);
+  const form = event.currentTarget;
+  const values = new FormData(form);
   const update = Object.fromEntries(['full_name', 'faculty', 'academic_year', 'phone']
     .map((key) => [key, String(values.get(key) || '').trim()]));
+  const photo = form.elements.namedItem('avatar_file').files?.[0] || null;
+  const removeAvatar = document.getElementById('removeProfileAvatar')?.dataset.remove === 'true';
+  let newAvatarPath = appState.profile?.avatar_path || null;
+  if (photo) {
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(photo.type) || photo.size > 2 * 1024 * 1024) {
+      showToast(t('اختر صورة بصيغة JPG أو PNG أو WebP أو GIF وحجم لا يتجاوز 2 ميغابايت.', 'Choose a JPG, PNG, WebP, or GIF image up to 2 MB.'), true);
+      return;
+    }
+    const safeName = photo.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    newAvatarPath = `${appState.user.id}/${Date.now()}-${safeName}`;
+    const upload = await appState.client.storage.from('profile-avatars').upload(newAvatarPath, photo, {
+      contentType: photo.type,
+      upsert: false,
+    });
+    if (upload.error) return reportError(upload.error);
+  } else if (removeAvatar) {
+    newAvatarPath = null;
+  }
+  if (photo || removeAvatar) update.avatar_path = newAvatarPath;
   const { error } = await appState.client.from('profiles').update(update).eq('id', appState.user.id);
-  if (error) return reportError(error);
+  if (error) {
+    if (photo && newAvatarPath) {
+      const cleanup = await appState.client.storage.from('profile-avatars').remove([newAvatarPath]);
+      if (cleanup.error) console.error('Could not remove the unreferenced profile image.', cleanup.error);
+    }
+    return reportError(error);
+  }
+  const oldAvatarPath = appState.profile?.avatar_path;
+  if (photo && oldAvatarPath && oldAvatarPath !== newAvatarPath) {
+    const cleanup = await appState.client.storage.from('profile-avatars').remove([oldAvatarPath]);
+    if (cleanup.error) console.error('Could not remove the previous profile image.', cleanup.error);
+  }
+  if (removeAvatar && oldAvatarPath) {
+    const cleanup = await appState.client.storage.from('profile-avatars').remove([oldAvatarPath]);
+    if (cleanup.error) console.error('Could not remove the previous profile image.', cleanup.error);
+  }
+  form.elements.namedItem('avatar_file').value = '';
   showToast(t('تم تحديث البيانات بنجاح.', 'Your changes were saved.'));
   await loadDashboard();
+  if (communityActivityChannel) {
+    const { error: presenceError } = await communityActivityChannel.track({
+      user_id: appState.user.id,
+      first_name: firstName(appState.profile?.full_name),
+      avatar_path: appState.profile?.avatar_path || null,
+    });
+    if (presenceError) reportError(presenceError);
+  }
 }
 
 async function renderCourseReviews(courseId) {
@@ -1874,11 +2195,30 @@ async function loadCommunityMessages() {
     target.replaceChildren(...data.map((message) => {
       const row = document.createElement('div');
       row.className = 'chat-message';
+      const main = document.createElement('div');
+      main.className = 'chat-message-main';
+      const avatar = document.createElement('span');
+      avatar.className = 'chat-avatar';
+      const member = getCommunityMember(message.profile_id);
+      const avatarUrl = avatarPublicUrl(member?.avatar_path);
+      if (avatarUrl) {
+        const image = document.createElement('img');
+        image.src = avatarUrl;
+        image.alt = '';
+        image.addEventListener('error', () => {
+          image.remove();
+          avatar.textContent = firstName(message.sender_name).charAt(0).toUpperCase();
+        }, { once: true });
+        avatar.appendChild(image);
+      } else {
+        avatar.textContent = firstName(message.sender_name).charAt(0).toUpperCase();
+      }
       const sender = document.createElement('strong');
       sender.textContent = `${message.sender_name}: `;
       const body = document.createElement('span');
       body.textContent = message.body;
-      row.append(sender, body);
+      main.append(avatar, sender, body);
+      row.appendChild(main);
       if (isAdmin() || message.profile_id === appState.user.id) {
         const remove = document.createElement('button');
         remove.type = 'button';
@@ -1917,6 +2257,15 @@ let callParticipantsChannel = null;
 const callPeers = new Map();
 const remoteStreams = new Map();
 let callMode = 'video';
+let callJoinPending = false;
+let communityActivityChannel = null;
+let communityTypingChannel = null;
+const typingMembers = new Map();
+const typingTimeouts = new Map();
+let lastTypingBroadcast = 0;
+let typingIdleTimeout = null;
+const speakingAnimations = new Map();
+const callTiles = new Map();
 
 async function loadCallRooms() {
   const select = document.getElementById('callRoomSelect');
@@ -1968,6 +2317,108 @@ function bindCallControls() {
   });
 }
 
+function getCommunityMember(profileId) {
+  return appState.communityMembers.find((member) => member.id === profileId);
+}
+
+function setCallAvatar(image, fallback, member) {
+  const url = avatarPublicUrl(member?.avatar_path);
+  image.src = url || '';
+  image.hidden = !url;
+  fallback.hidden = Boolean(url);
+  fallback.textContent = firstName(member?.first_name || member?.profile_name).charAt(0).toUpperCase();
+  image.onerror = () => {
+    image.hidden = true;
+    fallback.hidden = false;
+  };
+}
+
+function ensureCallTile(profileId, member, local = false) {
+  const tileId = local ? 'localCallTile' : `call-tile-${profileId}`;
+  let tile = document.getElementById(tileId);
+  if (local && tile) tile.hidden = false;
+  if (!tile) {
+    tile = document.createElement('div');
+    tile.id = tileId;
+    tile.className = 'call-user-tile';
+    const avatar = document.createElement('img');
+    avatar.className = 'call-avatar';
+    avatar.alt = '';
+    avatar.hidden = true;
+    const fallback = document.createElement('span');
+    fallback.className = 'call-avatar-fallback';
+    const video = document.createElement('video');
+    video.id = `remote-video-${profileId}`;
+    video.autoplay = true;
+    video.playsInline = true;
+    const name = document.createElement('span');
+    name.className = 'call-user-name';
+    tile.append(avatar, fallback, video, name);
+    document.getElementById('remoteCallVideos')?.appendChild(tile);
+  }
+  const avatar = tile.querySelector('.call-avatar');
+  const fallback = tile.querySelector('.call-avatar-fallback');
+  const name = tile.querySelector('.call-user-name');
+  if (avatar && fallback) setCallAvatar(avatar, fallback, member);
+  const videoActive = local
+    ? callMode === 'video' && Boolean(callStream?.getVideoTracks().length)
+    : Boolean(remoteStreams.get(profileId)?.getVideoTracks().length);
+  if (avatar && fallback && videoActive) {
+    avatar.hidden = true;
+    fallback.hidden = true;
+  }
+  if (name) name.textContent = firstName(member?.first_name || member?.profile_name);
+  callTiles.set(profileId, tile);
+  return tile;
+}
+
+function animateSpeaking(stream, key, tile) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass || !stream.getAudioTracks().length || speakingAnimations.has(key)) return;
+  let context;
+  let analyser;
+  try {
+    context = new AudioContextClass();
+    analyser = context.createAnalyser();
+    analyser.fftSize = 512;
+    context.createMediaStreamSource(stream).connect(analyser);
+    if (context.state === 'suspended') {
+      context.resume().catch((error) => console.error('Could not resume the call audio analyzer.', error));
+    }
+  } catch (error) {
+    console.error('Could not start the call audio analyzer.', error);
+    if (context) context.close().catch((closeError) => console.error(closeError));
+    return;
+  }
+  const samples = new Uint8Array(analyser.fftSize);
+  let frame = 0;
+  const measure = () => {
+    analyser.getByteTimeDomainData(samples);
+    let energy = 0;
+    for (const sample of samples) {
+      const amplitude = (sample - 128) / 128;
+      energy += amplitude * amplitude;
+    }
+    const speaking = Math.sqrt(energy / samples.length) > 0.045;
+    tile.classList.toggle('is-speaking', speaking);
+    document.getElementById(`call-participant-${key}`)?.classList.toggle('is-speaking', speaking);
+    frame = requestAnimationFrame(measure);
+  };
+  measure();
+  speakingAnimations.set(key, {
+    stop: () => {
+      cancelAnimationFrame(frame);
+      tile.classList.remove('is-speaking');
+      context.close().catch((error) => console.error('Could not close the call audio analyzer.', error));
+    },
+  });
+}
+
+function stopSpeakingAnimation(key) {
+  speakingAnimations.get(key)?.stop();
+  speakingAnimations.delete(key);
+}
+
 async function createCallPeer(roomId, remoteUserId) {
   if (!remoteUserId || remoteUserId === appState.user.id) return null;
   if (callPeers.has(remoteUserId)) return callPeers.get(remoteUserId);
@@ -1987,29 +2438,34 @@ async function createCallPeer(roomId, remoteUserId) {
     event.streams[0]?.getTracks().forEach((track) => {
       if (!stream.getTracks().some((item) => item.id === track.id)) stream.addTrack(track);
     });
-    let video = document.getElementById(`remote-video-${remoteUserId}`);
-    if (!video) {
-      video = document.createElement('video');
-      video.id = `remote-video-${remoteUserId}`;
-      video.autoplay = true;
-      video.playsInline = true;
-      video.dataset.profileId = remoteUserId;
-      document.getElementById('remoteCallVideos')?.appendChild(video);
-    }
+    const member = getCommunityMember(remoteUserId);
+    const tile = ensureCallTile(remoteUserId, member || { first_name: t('مشارك', 'Participant') });
+    const video = tile.querySelector('video');
     video.srcObject = stream;
+    const videoActive = stream.getVideoTracks().length > 0;
+    const hasAvatar = Boolean(tile.querySelector('.call-avatar').getAttribute('src'));
+    video.hidden = !videoActive;
+    const avatar = tile.querySelector('.call-avatar');
+    const fallback = tile.querySelector('.call-avatar-fallback');
+    avatar.hidden = videoActive || !hasAvatar;
+    fallback.hidden = videoActive || hasAvatar;
+    animateSpeaking(stream, remoteUserId, tile);
   };
   peer.onicecandidate = async (event) => {
     if (!event.candidate) return;
-    await appState.client.from('call_signals').insert({
+    const result = await appState.client.from('call_signals').insert({
       room_id: roomId,
       sender_id: appState.user.id,
       receiver_id: remoteUserId,
       signal: { type: 'candidate', candidate: event.candidate },
     });
+    if (result.error) reportError(result.error);
   };
   peer.onconnectionstatechange = () => {
     if (['failed', 'closed', 'disconnected'].includes(peer.connectionState)) {
-      document.getElementById(`remote-video-${remoteUserId}`)?.remove();
+      callTiles.get(remoteUserId)?.remove();
+      callTiles.delete(remoteUserId);
+      stopSpeakingAnimation(remoteUserId);
       callPeers.delete(remoteUserId);
       remoteStreams.delete(remoteUserId);
     }
@@ -2021,7 +2477,7 @@ async function createCallPeer(roomId, remoteUserId) {
 
 async function joinCallRoom(mode = 'video') {
   const roomId = document.getElementById('callRoomSelect')?.value;
-  if (!roomId || !appState.user) return;
+  if (!roomId || !appState.user || activeCallRoom || callJoinPending) return;
   if (appState.profile?.kicked_until && new Date(appState.profile.kicked_until) > new Date()) {
     showToast(t('تم طردك مؤقتًا من المكالمات.', 'You are temporarily removed from calls.'), true);
     return;
@@ -2031,26 +2487,46 @@ async function joinCallRoom(mode = 'video') {
     showToast(t('المتصفح لا يدعم المكالمات الصوتية والفيديو.', 'This browser does not support audio and video calls.'), true);
     return;
   }
+  callJoinPending = true;
   try {
     callStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: true, noiseSuppression: true },
       video: mode === 'video' ? { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } } : false,
     });
   } catch (error) {
+    callJoinPending = false;
     return reportError(error);
   }
   activeCallRoom = roomId;
+  callJoinPending = false;
   const localVideo = document.getElementById('localCallVideo');
   localVideo.srcObject = callStream;
-  localVideo.style.display = mode === 'video' ? '' : 'none';
+  localVideo.hidden = mode !== 'video';
+  const localTile = ensureCallTile(appState.user.id, {
+    first_name: appState.profile?.full_name,
+    avatar_path: appState.profile?.avatar_path,
+  }, true);
+  localTile.querySelector('.call-avatar').id = 'localCallAvatar';
+  localTile.querySelector('.call-avatar-fallback').id = 'localCallAvatarFallback';
+  localTile.querySelector('.call-user-name').id = 'localCallName';
+  const localHasAvatar = Boolean(localTile.querySelector('.call-avatar').getAttribute('src'));
+  localTile.querySelector('.call-avatar').hidden = mode === 'video' || !localHasAvatar;
+  localTile.querySelector('.call-avatar-fallback').hidden = mode === 'video' || localHasAvatar;
+  animateSpeaking(callStream, appState.user.id, localTile);
   const presence = await appState.client.from('call_participants').upsert({
     room_id: roomId,
     profile_id: appState.user.id,
-    profile_name: appState.profile?.full_name || t('مشارك', 'Participant'),
+    profile_name: firstName(appState.profile?.full_name),
+    avatar_path: appState.profile?.avatar_path || null,
     left_at: null,
   }, { onConflict: 'room_id,profile_id' });
   if (presence.error) {
     callStream.getTracks().forEach((track) => track.stop());
+    stopSpeakingAnimation(appState.user.id);
+    localVideo.srcObject = null;
+    localTile.hidden = true;
+    callStream = null;
+    activeCallRoom = null;
     return reportError(presence.error);
   }
 
@@ -2073,12 +2549,13 @@ async function joinCallRoom(mode = 'video') {
         if (peer.signalingState === 'have-remote-offer') {
           const answer = await peer.createAnswer();
           await peer.setLocalDescription(answer);
-          await appState.client.from('call_signals').insert({
+          const result = await appState.client.from('call_signals').insert({
             room_id: roomId,
             sender_id: appState.user.id,
             receiver_id: remoteUserId,
             signal: { type: 'answer', description: peer.localDescription },
           });
+          if (result.error) reportError(result.error);
         }
       } else if (signal.signal.type === 'answer') {
         if (peer.signalingState === 'have-local-offer') {
@@ -2111,34 +2588,43 @@ async function joinCallRoom(mode = 'video') {
   document.getElementById('toggleCallMute').hidden = false;
   document.getElementById('toggleCallCamera').hidden = mode !== 'video';
 
-  const { data: participants } = await appState.client.from('call_participants')
+  const participantsResult = await appState.client.from('call_participants')
     .select('profile_id')
     .eq('room_id', roomId).is('left_at', null);
-  for (const participant of participants || []) {
+  if (participantsResult.error) {
+    await leaveCallRoom();
+    return reportError(participantsResult.error);
+  }
+  for (const participant of participantsResult.data || []) {
     if (participant.profile_id === appState.user.id) continue;
     const peer = await createCallPeer(roomId, participant.profile_id);
     if (!peer) continue;
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
-    await appState.client.from('call_signals').insert({
+    const signal = await appState.client.from('call_signals').insert({
       room_id: roomId,
       sender_id: appState.user.id,
       receiver_id: participant.profile_id,
       signal: { type: 'offer', description: peer.localDescription },
     });
+    if (signal.error) return reportError(signal.error);
   }
   await renderCallParticipants(roomId);
 }
 
 async function leaveCallRoom() {
+  let leaveError = null;
   if (activeCallRoom && appState.user) {
-    await appState.client.from('call_participants').update({ left_at: new Date().toISOString() })
+    const result = await appState.client.from('call_participants').update({ left_at: new Date().toISOString() })
       .eq('room_id', activeCallRoom).eq('profile_id', appState.user.id);
+    leaveError = result.error;
   }
   callStream?.getTracks().forEach((track) => track.stop());
   callPeers.forEach((peer) => peer.close());
   callPeers.clear();
+  for (const key of speakingAnimations.keys()) stopSpeakingAnimation(key);
   remoteStreams.clear();
+  callTiles.clear();
   if (callChannel) appState.client.removeChannel(callChannel);
   if (callParticipantsChannel) appState.client.removeChannel(callParticipantsChannel);
   activeCallRoom = null;
@@ -2149,21 +2635,48 @@ async function leaveCallRoom() {
   document.getElementById('toggleCallMute').hidden = true;
   document.getElementById('toggleCallCamera').hidden = true;
   document.getElementById('localCallVideo').srcObject = null;
+  document.getElementById('localCallVideo').hidden = false;
+  document.getElementById('localCallTile').hidden = true;
   document.getElementById('remoteCallVideos').replaceChildren();
   document.getElementById('callParticipants').replaceChildren();
+  if (leaveError) reportError(leaveError);
 }
 
 async function renderCallParticipants(roomId) {
   const target = document.getElementById('callParticipants');
   if (!target) return;
   const { data, error } = await appState.client.from('call_participants')
-    .select('profile_id,profile_name,joined_at,left_at')
+    .select('profile_id,profile_name,avatar_path,joined_at,left_at')
     .eq('room_id', roomId).is('left_at', null);
   if (error) return reportError(error);
+  const presentIds = new Set((data || []).map((participant) => participant.profile_id));
+  for (const [profileId, peer] of callPeers) {
+    if (presentIds.has(profileId)) continue;
+    peer.close();
+    callPeers.delete(profileId);
+    remoteStreams.delete(profileId);
+    callTiles.get(profileId)?.remove();
+    callTiles.delete(profileId);
+    stopSpeakingAnimation(profileId);
+  }
   target.replaceChildren(...(data || []).map((participant) => {
     const item = document.createElement('span');
     item.className = 'call-participant';
-    item.textContent = `${participant.profile_name || t('مشارك', 'Participant')} · ${participant.profile_id === appState.user.id ? t('أنت', 'You') : t('متواجد', 'Present')}`;
+    item.id = `call-participant-${participant.profile_id}`;
+    const member = getCommunityMember(participant.profile_id) || participant;
+    const name = firstName(member.first_name || participant.profile_name);
+    const tile = ensureCallTile(participant.profile_id, {
+      first_name: name,
+      avatar_path: member.avatar_path || participant.avatar_path,
+      profile_name: name,
+    }, participant.profile_id === appState.user.id);
+    if (participant.profile_id === appState.user.id) {
+      document.getElementById('localCallVideo').hidden = callMode !== 'video';
+    } else if (!remoteStreams.has(participant.profile_id)) {
+      tile.querySelector('video').hidden = true;
+    }
+    item.textContent = `${name} · ${participant.profile_id === appState.user.id ? t('أنت', 'You') : t('متواجد', 'Present')}`;
+    if (tile.classList.contains('is-speaking')) item.classList.add('is-speaking');
     return item;
   }));
 }
@@ -2193,12 +2706,18 @@ function bindCommunityChat() {
         body,
       });
       if (error) return reportError(error);
+      await broadcastTyping(isPrivate ? selectedCourse : 'public', false);
       input.value = '';
       await loadCommunityMessages();
     });
   });
   document.getElementById('privateCourseSelect')?.addEventListener('change', () => {
     loadCommunityMessages().catch(reportError);
+    const courseId = document.getElementById('privateCourseSelect').value;
+    document.getElementById('privateTyping').replaceChildren();
+    document.getElementById('privateTyping').classList.remove('is-typing');
+    if (courseId) loadTypingStatus(courseId).catch(reportError);
+    if (courseId) renderTypingStatus(courseId);
   });
 }
 
@@ -2345,8 +2864,10 @@ async function initialize() {
   document.getElementById('profileForm')?.addEventListener('submit', (event) => {
     saveProfile(event).catch(reportError);
   });
+  bindProfileAvatar();
   bindCommunityChat();
   bindCallControls();
+  bindTypingIndicators();
 
   appState.client = getClient();
   if (!appState.client) {
@@ -2389,6 +2910,8 @@ async function initialize() {
       }
       updateNavigation();
       await guardPage();
+      await loadCommunityMembers().catch(reportError);
+      subscribeToCommunityActivity();
       await loadAnnouncements();
       subscribeToAnnouncements();
       await renderCourseCatalog();
@@ -2397,6 +2920,11 @@ async function initialize() {
       await populateCommunityCourses();
       await loadCommunityMessages();
       await loadCallRooms();
+      if (document.getElementById('publicTyping')) {
+        await loadTypingStatus('public').catch(reportError);
+        const selectedCourse = document.getElementById('privateCourseSelect')?.value;
+        if (selectedCourse) await loadTypingStatus(selectedCourse).catch(reportError);
+      }
     } catch (error) {
       reportError(error);
     }
