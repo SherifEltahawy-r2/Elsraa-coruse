@@ -2505,11 +2505,15 @@ function loadJitsiExternalApi() {
 function renderJitsiIframeFallback(host, call, userName) {
   const container = document.createElement('div');
   container.className = 'jitsi-meeting-container';
-  const iframe = document.createElement('iframe');
+  const iframeTemplate = document.getElementById('jitsiCallIframeTemplate');
+  const iframe = iframeTemplate?.content.querySelector('iframe')?.cloneNode(false)
+    || document.createElement('iframe');
   iframe.title = t('المكالمة المباشرة', 'Live call');
-  iframe.allow = 'camera; microphone; fullscreen; display-capture; autoplay';
+  iframe.setAttribute('allow', 'camera; microphone; fullscreen; display-capture; autoplay');
   iframe.src = `https://ffmuc.net/${encodeURIComponent(call.room_slug)}`
-    + `#config.prejoinPageEnabled=false&config.requireDisplayName=false&userInfo.displayName=${encodeURIComponent(userName)}`;
+    + `#config.startWithAudioMuted=true&config.startWithVideoMuted=true`
+    + `&config.prejoinPageEnabled=false&config.requireDisplayName=false`
+    + `&userInfo.displayName=${encodeURIComponent(userName)}`;
   container.appendChild(iframe);
   host.replaceChildren(container);
 }
@@ -2541,6 +2545,8 @@ async function joinLiveCall(call, hostId, leaveButtonId) {
           height: '72vh',
           userInfo: { displayName },
           configOverwrite: {
+            startWithAudioMuted: true,
+            startWithVideoMuted: true,
             prejoinPageEnabled: false,
             requireDisplayName: false,
             enableLobbyChat: false,
